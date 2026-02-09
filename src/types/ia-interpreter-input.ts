@@ -10,4 +10,5 @@ export interface IAInterpreterInput {
     };
     [key: string]: any;
   };
+  sessionId?: string;
 }
