@@ -36,7 +36,7 @@ export class IAInterpreterService {
       localResult = await interpretLocal(input, modulosDisponibles);
 
       const confidence = localResult.confidence || 0;
-      const UMBRAL_CONFIANZA = 0.3;
+      const UMBRAL_CONFIANZA = 0.15;
 
       if (confidence >= UMBRAL_CONFIANZA) {
         return {
