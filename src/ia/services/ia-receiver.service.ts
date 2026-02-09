@@ -3,7 +3,7 @@ import { IAInterpreterInput } from "../../types/ia-interpreter-input";
 
 export interface ReceiveMessageResult {
   success: boolean;
-  payload?: IAInterpreterInput; // payload ahora usa IAInterpreterInput
+  payload?: IAInterpreterInput & { sessionId?: string };
   error?: string;
   details?: any;
 }
@@ -15,28 +15,69 @@ export async function receiveMessage(
   body: unknown
 ): Promise<ReceiveMessageResult> {
   try {
-    const parsed = IAInputSchema.safeParse(body);
-
-    if (!parsed.success) {
+    // Parsear el cuerpo de la solicitud
+    const parsedBody = typeof body === 'string' ? JSON.parse(body) : body;
+    
+    // Validar estructura básica
+    if (!parsedBody || typeof parsedBody !== 'object') {
       return {
         success: false,
         error: "INVALID_INPUT",
-        details: parsed.error.format()
+        details: "El cuerpo de la solicitud debe ser un objeto JSON válido"
       };
     }
 
-    const { message, context } = parsed.data;
+    const { message, context, sessionId } = parsedBody;
 
-    // Retornamos payload listo para el interprete
+    // Validar campos requeridos
+    if (!message || typeof message !== 'string') {
+      return {
+        success: false,
+        error: "INVALID_MESSAGE",
+        details: "El campo 'message' es requerido y debe ser una cadena de texto"
+      };
+    }
+
+    if (!context || typeof context !== 'object') {
+      return {
+        success: false,
+        error: "INVALID_CONTEXT",
+        details: "El campo 'context' es requerido y debe ser un objeto"
+      };
+    }
+
+    // Validar permisos dentro del contexto
+    if (!context.permisos || !Array.isArray(context.permisos.modulos) || !Array.isArray(context.permisos.acciones)) {
+      return {
+        success: false,
+        error: "INVALID_PERMISSIONS",
+        details: "El contexto debe contener permisos con modulos y acciones como arrays"
+      };
+    }
+
+    // Validar sessionId si está presente
+    if (sessionId !== undefined && (typeof sessionId !== 'string' || !sessionId.startsWith('sess_'))) {
+      return {
+        success: false,
+        error: "INVALID_SESSION_ID",
+        details: "sessionId debe ser una cadena que comience con 'sess_'"
+      };
+    }
+
+    // Retornar payload listo para el interprete
     return {
       success: true,
-      payload: { message, context }
+      payload: { 
+        message, 
+        context,
+        sessionId: sessionId || undefined
+      }
     };
-  } catch (err) {
+  } catch (err: any) {
     return {
       success: false,
       error: "ERROR_RECEIVER",
-      details: err instanceof Error ? err.message : err
+      details: err.message || "Error desconocido al procesar la solicitud"
     };
   }
 }
