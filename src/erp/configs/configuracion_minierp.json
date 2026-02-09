@@ -1,0 +1,75 @@
+{
+  "erp": "MiniERP",
+  "baseUrl": "http://localhost:8000",
+  "modulos": {
+    "VENTAS": {
+      "CREATE": [],
+      "READ": [
+        {
+          "intencion": "ListarVentas",
+          "descripcion": "Devuelve todas las ventas",
+          "endpoint": "/ventas/listar",
+          "metodo": "POST",
+          "payload": {},
+          "tipo_salida": "array",
+          "observaciones": "Simula GET usando POST"
+        },
+        {
+          "intencion": "VentasIDs",
+          "descripcion": "Devuelve solo los IDs de las ventas",
+          "endpoint": "/ventas/ids",
+          "metodo": "POST",
+          "payload": {},
+          "tipo_salida": "array_ids",
+          "observaciones": "Escenario extremo: primero devuelve IDs y luego se debe llamar a /ventas/get por cada ID"
+        },
+        {
+          "intencion": "ObtenerVentaPorID",
+          "descripcion": "Obtiene la venta completa según su ID",
+          "endpoint": "/ventas/get",
+          "metodo": "POST",
+          "payload": { "id": "string" },
+          "tipo_salida": "objeto",
+          "observaciones": "Si no existe devuelve 404"
+        }
+      ],
+      "UPDATE": [],
+      "DELETE": []
+    },
+    "FACTURACION": {
+      "CREATE": [
+        {
+          "intencion": "CrearFactura",
+          "descripcion": "Crea una nueva factura",
+          "endpoint": "/facturas",
+          "metodo": "POST",
+          "payload": {
+            "cliente": "string",
+            "items": [
+              {
+                "producto": "string",
+                "cantidad": "number",
+                "precio": "number"
+              }
+            ]
+          },
+          "tipo_salida": "objeto",
+          "observaciones": "Calcula total automáticamente y agrega ID"
+        }
+      ],
+      "READ": [
+        {
+          "intencion": "ListarFacturas",
+          "descripcion": "Devuelve todas las facturas",
+          "endpoint": "/facturas",
+          "metodo": "GET",
+          "payload": null,
+          "tipo_salida": "array",
+          "observaciones": "Listado completo de facturas"
+        }
+      ],
+      "UPDATE": [],
+      "DELETE": []
+    }
+  }
+}

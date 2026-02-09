@@ -1,0 +1,216 @@
+{
+  "version": "1.0.0",
+  "description": "Configuración de mapeo de palabras, sinónimos y lógica de interpretación para el motor local",
+  
+  "settings": {
+    "umbralMinimoConfianza": 0.2,
+    "maxIntentosLocal": 2,
+    "tiempoEsperaFallback": 1000,
+    "nivelLog": "debug"
+  },
+  
+  "normalizacion": {
+    "correccionesOrtograficas": {
+      "nesesito": "necesito",
+      "ber": "ver",
+      "bentas": "ventas",
+      "fas": "vas",
+      "aksar": "hacer",
+      "aser": "hacer",
+      "oi": "hoy",
+      "alla": "haya",
+      "haber": "a ver",
+      "asta": "hasta",
+      "echo": "hecho",
+      "haiga": "haya",
+      "hibo": "hubo",
+      "istes": "hiciste"
+    },
+    
+    "eliminarPalabras": [
+      "por favor",
+      "podrías",
+      "quiero",
+      "necesito",
+      "me gustaría",
+      "sería posible",
+      "oye",
+      "hola",
+      "buenos días",
+      "buenas tardes",
+      "gracias",
+      "porfa",
+      "plis",
+      "favor"
+    ],
+    
+    "palabrasVacias": [
+      "el", "la", "los", "las", "un", "una", "unos", "unas",
+      "de", "del", "al", "a", "en", "y", "o", "con", "por",
+      "para", "sin", "sobre", "bajo", "entre", "hacia", "desde"
+    ]
+  },
+  
+  "vocabulario": {
+    "modulos": {
+      "VENTAS": {
+        "palabrasClave": ["venta", "ventas", "pedido", "order", "sale", "transacción"],
+        "palabrasRelacionadas": ["factura", "invoice", "recibo", "ticket", "compra", "orden"],
+        "sinonimosDirectos": {
+          "venta": ["transacción", "pedido", "orden"],
+          "factura": ["invoice", "comprobante"]
+        }
+      },
+      
+      "FACTURACION": {
+        "palabrasClave": ["factura", "facturas", "facturación", "invoice", "billing"],
+        "palabrasRelacionadas": ["comprobante", "nota", "recibo", "pago", "cobro"],
+        "sinonimosDirectos": {
+          "factura": ["invoice", "comprobante", "recibo"],
+          "crear": ["generar", "emitir"]
+        }
+      },
+      
+      "CLIENTES": {
+        "palabrasClave": ["cliente", "clientes", "customer", "contacto"],
+        "palabrasRelacionadas": ["comprador", "usuario", "persona", "empresa"]
+      },
+      
+      "PRODUCTOS": {
+        "palabrasClave": ["producto", "productos", "artículo", "item"],
+        "palabrasRelacionadas": ["inventario", "stock", "mercancía", "bien"]
+      }
+    },
+    
+    "acciones": {
+      "CREATE": {
+        "palabrasClave": ["crear", "nuevo", "añadir", "agregar", "generar", "emitir"],
+        "sinonimos": ["insertar", "registrar", "dar de alta"]
+      },
+      
+      "READ": {
+        "palabrasClave": ["ver", "mostrar", "listar", "consultar", "buscar", "obtener"],
+        "sinonimos": ["dame", "muestra", "trae", "enseña", "presenta"],
+        "expresionesTipicas": [
+          "dame [algo]",
+          "muestra [algo]",
+          "quiero ver [algo]",
+          "necesito [algo]",
+          "listar [algo]",
+          "reporte de [algo]"
+        ]
+      },
+      
+      "UPDATE": {
+        "palabrasClave": ["actualizar", "modificar", "editar", "cambiar", "corregir"],
+        "sinonimos": ["ajustar", "revisar", "mejorar"]
+      },
+      
+      "DELETE": {
+        "palabrasClave": ["eliminar", "borrar", "remover", "quitar", "anular"],
+        "sinonimos": ["cancelar", "suprimir", "destruir"]
+      }
+    }
+  },
+  
+  "patrones": {
+    "detectarAccion": {
+      "CREATE": [
+        "crear (una|un|el|la) \\w+",
+        "nuev[oa] \\w+",
+        "agregar (una|un) \\w+",
+        "generar (una|un) \\w+",
+        "emitir (una|un) \\w+"
+      ],
+      "READ": [
+        "ver (las|los|el|la) \\w+",
+        "mostrar (las|los) \\w+",
+        "listar (las|los) \\w+",
+        "dame (las|los|el|la) \\w+",
+        "consultar (las|los) \\w+",
+        "reporte de \\w+",
+        "informe de \\w+"
+      ],
+      "UPDATE": [
+        "actualizar (el|la) \\w+",
+        "modificar (el|la) \\w+",
+        "editar (el|la) \\w+",
+        "cambiar (el|la) \\w+"
+      ],
+      "DELETE": [
+        "eliminar (el|la) \\w+",
+        "borrar (el|la) \\w+",
+        "anular (el|la) \\w+",
+        "quitar (el|la) \\w+"
+      ]
+    },
+    
+    "detectarModulo": {
+      "VENTAS": [
+        "\\bventas?\\b",
+        "\\bpedidos?\\b",
+        "\\borders?\\b",
+        "\\bsales?\\b",
+        "transacciones?"
+      ],
+      "FACTURACION": [
+        "\\bfacturas?\\b",
+        "\\bfacturacion\\b",
+        "\\binvoices?\\b",
+        "\\bbilling\\b",
+        "comprobantes?"
+      ],
+      "CLIENTES": ["\\bclientes?\\b", "\\bcustomers?\\b", "\\bcontactos?\\b"],
+      "PRODUCTOS": ["\\bproductos?\\b", "\\barticulos?\\b", "\\bitems?\\b", "\\binventario\\b"]
+    },
+    
+    "extraerParametros": {
+      "id": [
+        "id\\s+([a-zA-Z0-9\\-]{6,36})",
+        "número\\s+([a-zA-Z0-9\\-]{6,36})",
+        "código\\s+([a-zA-Z0-9\\-]{6,36})",
+        "([a-zA-Z0-9\\-]{6,36})"
+      ],
+      "fecha": [
+        "desde\\s+(\\d{4}-\\d{2}-\\d{2})",
+        "hasta\\s+(\\d{4}-\\d{2}-\\d{2})",
+        "fecha\\s+(\\d{4}-\\d{2}-\\d{2})",
+        "día\\s+(\\d{4}-\\d{2}-\\d{2})"
+      ],
+      "cliente": [
+        "cliente\\s+([a-zA-Z0-9\\-_]+)",
+        "para\\s+cliente\\s+([a-zA-Z0-9\\-_]+)",
+        "del\\s+cliente\\s+([a-zA-Z0-9\\-_]+)"
+      ],
+      "cantidad": [
+        "(\\d+)\\s+unidades?",
+        "cantidad\\s+(\\d+)",
+        "(\\d+)\\s+items?",
+        "(\\d+)\\s+productos?"
+      ]
+    }
+  },
+  
+  "puntuacion": {
+    "modulo": {
+      "coincidenciaExacta": 5.0,
+      "coincidenciaPalabraCompleta": 3.0,
+      "coincidenciaParcial": 1.0,
+      "palabraRelacionada": 0.5,
+      "umbralMinimo": 2.0
+    },
+    
+    "accion": {
+      "coincidenciaExacta": 3.0,
+      "coincidenciaPalabraCompleta": 2.0,
+      "coincidenciaParcial": 1.0,
+      "expresionTipica": 2.5,
+      "umbralMinimo": 1.5
+    }
+  },
+  
+  "defaults": {
+    "moduloPorDefecto": "VENTAS",
+    "accionPorDefecto": "READ"
+  }
+}
