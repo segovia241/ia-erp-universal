@@ -1,21 +1,19 @@
 import { IAOutputSchema } from "../schemas/ia-output.schema";
 
-interface GenerateOutputParams {
-  output: IAOutputSchema;
-  context: {
-    permisos: {
-      modulos: string[];
-      acciones: string[];
-    };
-  };
-}
-
 export class IAOutputService {
-  /**
-   * Genera la preview y el curl respetando permisos
-   */
-  generate({ output, context }: GenerateOutputParams) {
-    const { action, module, endpoint, method, payload, preview } = output;
+  generate(output: IAOutputSchema | { needsParameters: any[]; message: string; sessionId: string }, context: any) {
+    // Si faltan parámetros
+    if ('needsParameters' in output) {
+      return {
+        success: false,
+        needsParameters: output.needsParameters,
+        message: output.message,
+        sessionId: output.sessionId
+      };
+    }
+
+    // Si es resultado completo
+    const { action, module, endpoint, method, payload, preview } = output as IAOutputSchema;
 
     // Validar permisos
     if (!context.permisos.modulos.includes(module)) {
@@ -39,7 +37,6 @@ export class IAOutputService {
         ? `curl "${endpoint}"`
         : `curl -X ${method} -H "Content-Type: application/json" -d '${payloadString}' "${endpoint}"`;
 
-    // Retornar todo
     return {
       success: true,
       preview,
