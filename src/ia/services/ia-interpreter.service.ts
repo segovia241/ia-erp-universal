@@ -14,6 +14,8 @@ interface PendingRequest {
   timestamp: number;
 }
 
+type InterpretResult = IAOutputSchema | { needsParameters: any[]; message: string; sessionId: string };
+
 export class IAInterpreterService {
   private motor: IAMotor;
   private gemini?: GeminiInterpreter;
@@ -36,7 +38,7 @@ export class IAInterpreterService {
     setInterval(() => this.cleanupExpiredSessions(), 5 * 60 * 1000);
   }
 
-  async interpret(input: IAInterpreterInput, sessionId?: string): Promise<IAOutputSchema | { needsParameters: any[]; message: string; sessionId: string }> {
+  async interpret(input: IAInterpreterInput, sessionId?: string): Promise<InterpretResult> {
     const { message, context } = input;
     const modulosDisponibles = context.permisos.modulos;
 
@@ -47,11 +49,16 @@ export class IAInterpreterService {
       
       // Si el resultado tiene sessionId, ya está incluido
       if ('sessionId' in result) {
-        return result;
+        return result as { needsParameters: any[]; message: string; sessionId: string };
       }
       
-      // Si no, agregar el sessionId
-      return { ...result, sessionId };
+      // Si no, agregar el sessionId - asegurando el tipo correcto
+      const resultWithSessionId = { 
+        ...result, 
+        sessionId 
+      } as { needsParameters: any[]; message: string; sessionId: string };
+      
+      return resultWithSessionId;
     }
 
     let localResult: any;
@@ -83,7 +90,7 @@ export class IAInterpreterService {
           };
         }
         
-        return localResult;
+        return localResult as IAOutputSchema;
       } else {
         localError = new Error(`Confianza insuficiente: ${confidence.toFixed(2)}`);
       }
@@ -112,14 +119,14 @@ export class IAInterpreterService {
           };
         }
         
-        return geminiResult;
+        return geminiResult as IAOutputSchema;
       } catch (geminiError: any) {
-        if (localResult) return localResult;
+        if (localResult) return localResult as IAOutputSchema;
         throw new Error(`No se pudo interpretar la instrucción. Motor local: ${localError?.message}, Gemini: ${geminiError.message}`);
       }
     }
 
-    if (localResult) return localResult;
+    if (localResult) return localResult as IAOutputSchema;
     throw new Error(`Motor local falló: ${localError?.message}`);
   }
 
@@ -156,7 +163,7 @@ export class IAInterpreterService {
     } else {
       // Todos los parámetros están completos - eliminar sesión
       this.pendingSessions.delete(sessionId);
-      return updatedResult;
+      return updatedResult as IAOutputSchema;
     }
   }
 
