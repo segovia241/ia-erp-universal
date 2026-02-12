@@ -18,78 +18,83 @@ export class IAInterpreterService {
   private erpConfigService: ERPConfigService;
   private pendingSessions: Map<string, PendingRequest> = new Map();
   private readonly SESSION_TIMEOUT = 15 * 60 * 1000;
+  private readonly FORCE_IA = process.env.FORCE_IA_ENGINE === "true";
 
   constructor(motor: IAMotor = "LOCAL") {
-    this.motor = motor;
     this.erpConfigService = new ERPConfigService();
-    this.interpreter = getIAMotor(motor, this.erpConfigService);
+
+    if (this.FORCE_IA) {
+      this.motor = "IA";
+    } else {
+      this.motor = motor;
+    }
+
+    this.interpreter = getIAMotor(this.motor, this.erpConfigService);
 
     setInterval(() => this.cleanupExpiredSessions(), 5 * 60 * 1000);
   }
 
   async interpret(input: IAInterpreterInput, sessionId?: string): Promise<InterpretResult> {
-  const { message, context } = input;
-  const modulosDisponibles = context.permisos.modulos;
+    const { message, context } = input;
+    const modulosDisponibles = context.permisos.modulos;
+    const activeSessionId = sessionId || input.sessionId;
 
-  // Usar sessionId del input si existe
-  const activeSessionId = sessionId || input.sessionId;
+    if (activeSessionId && this.pendingSessions.has(activeSessionId)) {
+      const pendingRequest = this.pendingSessions.get(activeSessionId)!;
+      const result = await this.processFollowUp(message, pendingRequest, activeSessionId);
 
-  // Si hay una sesión pendiente, procesar como continuación
-  if (activeSessionId && this.pendingSessions.has(activeSessionId)) {
-    const pendingRequest = this.pendingSessions.get(activeSessionId)!;
-    const result = await this.processFollowUp(message, pendingRequest, activeSessionId);
-
-    // Diferenciar tipos explícitamente
-    if ('needsParameters' in result) {
-      return {
-        needsParameters: result.needsParameters,
-        message: result.message,
-        sessionId: activeSessionId
-      };
-    }
-
-    // Si es IAOutputSchema
-    return result as IAOutputSchema;
-  }
-
-  let result: any;
-  try {
-    result = await this.interpreter.interpret(message, modulosDisponibles, context.erp);
-
-    const confidence = result.confidence || 0;
-    const UMBRAL_CONFIANZA = 0.15;
-
-    if (confidence >= UMBRAL_CONFIANZA) {
-      const missingParams = this.checkMissingParameters(result);
-      if (missingParams.length > 0) {
-        const newSessionId = activeSessionId || this.generateSessionId();
-        this.pendingSessions.set(newSessionId, {
-          originalResult: result,
-          missingParams,
-          context,
-          timestamp: Date.now()
-        });
+      if ('needsParameters' in result) {
         return {
-          needsParameters: missingParams,
-          message: this.generateParameterRequestMessage(missingParams, result),
-          sessionId: newSessionId
+          needsParameters: result.needsParameters,
+          message: result.message,
+          sessionId: activeSessionId
         };
       }
+
       return result as IAOutputSchema;
     }
 
-    throw new Error(`Confianza insuficiente: ${confidence.toFixed(2)}`);
-  } catch (error: any) {
-    throw new Error(`Error al interpretar: ${error.message}`);
+    let result: any;
+    try {
+      result = await this.interpreter.interpret(message, modulosDisponibles, context.erp);
+
+      const confidence = result.confidence || 0;
+      const UMBRAL_CONFIANZA = 0.15;
+
+      if (confidence >= UMBRAL_CONFIANZA) {
+        const missingParams = this.checkMissingParameters(result);
+        if (missingParams.length > 0) {
+          const newSessionId = activeSessionId || this.generateSessionId();
+          this.pendingSessions.set(newSessionId, {
+            originalResult: result,
+            missingParams,
+            context,
+            timestamp: Date.now()
+          });
+          return {
+            needsParameters: missingParams,
+            message: this.generateParameterRequestMessage(missingParams, result),
+            sessionId: newSessionId
+          };
+        }
+        return result as IAOutputSchema;
+      }
+
+      throw new Error(`Confianza insuficiente: ${confidence.toFixed(2)}`);
+    } catch (error: any) {
+      throw new Error(`Error al interpretar: ${error.message}`);
+    }
   }
-}
 
   setMotor(motor: IAMotor): void {
-    this.motor = motor;
-    this.interpreter = getIAMotor(motor, this.erpConfigService);
+    if (this.FORCE_IA) {
+      this.motor = "IA";
+    } else {
+      this.motor = motor;
+    }
+    this.interpreter = getIAMotor(this.motor, this.erpConfigService);
   }
 
-  // --- Funciones auxiliares idénticas al original ---
   private async processFollowUp(
     message: string, 
     pendingRequest: PendingRequest, 
@@ -172,14 +177,12 @@ export class IAInterpreterService {
   }
 
   private findParameterValue(text: string, paramName: string, type: string): string | null {
-    const textLower = text.toLowerCase();
-    const paramNameLower = paramName.toLowerCase();
     const patterns = [
-      `${paramNameLower}\\s+(es|de|:|es\\s+de)\\s+([^\\s.,;]+(?:\\s+[^\\s.,;]+)*)`,
-      `con\\s+${paramNameLower}\\s+([^\\s.,;]+(?:\\s+[^\\s.,;]+)*)`,
-      `para\\s+${paramNameLower}\\s+([^\\s.,;]+(?:\\s+[^\\s.,;]+)*)`,
-      `${paramNameLower}\\s+([^\\s.,;]+)`,
-      `([^\\s.,;]+)\\s+${paramNameLower}`
+      `${paramName.toLowerCase()}\\s+(es|de|:|es\\s+de)\\s+([^\\s.,;]+(?:\\s+[^\\s.,;]+)*)`,
+      `con\\s+${paramName.toLowerCase()}\\s+([^\\s.,;]+(?:\\s+[^\\s.,;]+)*)`,
+      `para\\s+${paramName.toLowerCase()}\\s+([^\\s.,;]+(?:\\s+[^\\s.,;]+)*)`,
+      `${paramName.toLowerCase()}\\s+([^\\s.,;]+)`,
+      `([^\\s.,;]+)\\s+${paramName.toLowerCase()}`
     ];
     for (const pattern of patterns) {
       const regex = new RegExp(pattern, 'i');
@@ -199,6 +202,15 @@ export class IAInterpreterService {
     return updatedResult;
   }
 
+  public debugInfo() {
+    return {
+      motor: this.motor,
+      pendingSessions: this.pendingSessions.size,
+      forceIA: this.FORCE_IA
+    };
+  }
+
+
   private generateSessionId(): string {
     return `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
@@ -206,7 +218,9 @@ export class IAInterpreterService {
   private cleanupExpiredSessions(): void {
     const now = Date.now();
     for (const [sessionId, session] of this.pendingSessions.entries()) {
-      if (now - session.timestamp > this.SESSION_TIMEOUT) this.pendingSessions.delete(sessionId);
+      if (now - session.timestamp > this.SESSION_TIMEOUT) {
+        this.pendingSessions.delete(sessionId);
+      }
     }
   }
 }
