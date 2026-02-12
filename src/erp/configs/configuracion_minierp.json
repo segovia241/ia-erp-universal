@@ -1,75 +1,285 @@
 {
-  "erp": "MiniERP",
-  "baseUrl": "http://localhost:8000",
-  "modulos": {
-    "VENTAS": {
-      "CREATE": [],
-      "READ": [
+  "empresa": {
+    "nombre": "demo",
+    "baseUrl": "https://demo.simplifica.pe:3043/"
+  },
+  "modulos": [
+    {
+      "nombre": "Clinico",
+      "crear": [],
+      "leer": [
         {
-          "intencion": "ListarVentas",
-          "descripcion": "Devuelve todas las ventas",
-          "endpoint": "/ventas/listar",
+          "id": 1,
+          "endpoint": "/Servicios/Clinico/WCF_Tsm_Pacientes.svc/F_Listar_Autocomplete",
+          "nombreReferencia": "Listar Pacientes",
+          "descripcion": "Lista pacientes enviando objeto oEntity con T_Descripcion (string, texto parcial a buscar).",
           "metodo": "POST",
-          "payload": {},
-          "tipo_salida": "array",
-          "observaciones": "Simula GET usando POST"
-        },
-        {
-          "intencion": "VentasIDs",
-          "descripcion": "Devuelve solo los IDs de las ventas",
-          "endpoint": "/ventas/ids",
-          "metodo": "POST",
-          "payload": {},
-          "tipo_salida": "array_ids",
-          "observaciones": "Escenario extremo: primero devuelve IDs y luego se debe llamar a /ventas/get por cada ID"
-        },
-        {
-          "intencion": "ObtenerVentaPorID",
-          "descripcion": "Obtiene la venta completa según su ID",
-          "endpoint": "/ventas/get",
-          "metodo": "POST",
-          "payload": { "id": "string" },
-          "tipo_salida": "objeto",
-          "observaciones": "Si no existe devuelve 404"
-        }
-      ],
-      "UPDATE": [],
-      "DELETE": []
-    },
-    "FACTURACION": {
-      "CREATE": [
-        {
-          "intencion": "CrearFactura",
-          "descripcion": "Crea una nueva factura",
-          "endpoint": "/facturas",
-          "metodo": "POST",
-          "payload": {
-            "cliente": "string",
-            "items": [
-              {
-                "producto": "string",
-                "cantidad": "number",
-                "precio": "number"
+          "parametros": [
+            {
+              "nombre": "oEntity",
+              "tipo": "object",
+              "obligatorio": false,
+              "opcional": false,
+              "fuente": {
+                "idReferencia": 0,
+                "nombreReferencia": "Directo"
+              },
+              "estructura": {
+                "esObjeto": true,
+                "esArray": false,
+                "propiedades": [
+                  {
+                    "nombre": "T_Descripcion",
+                    "tipo": "string",
+                    "opcional": false
+                  }
+                ]
               }
-            ]
-          },
-          "tipo_salida": "objeto",
-          "observaciones": "Calcula total automáticamente y agrega ID"
-        }
-      ],
-      "READ": [
+            }
+          ]
+        },
         {
-          "intencion": "ListarFacturas",
-          "descripcion": "Devuelve todas las facturas",
-          "endpoint": "/facturas",
-          "metodo": "GET",
-          "payload": null,
-          "tipo_salida": "array",
-          "observaciones": "Listado completo de facturas"
+          "id": 2,
+          "endpoint": "/Servicios/Clinico/WCF_Tsl_Medico.svc/F_Listar_Medicos_AutoComplete",
+          "nombreReferencia": "Listar Medicos",
+          "descripcion": "Lista medicos enviando objeto con T_Nombres (string, texto parcial, ejemplo %%%).",
+          "metodo": "POST",
+          "parametros": [
+            {
+              "nombre": "request",
+              "tipo": "object",
+              "obligatorio": false,
+              "opcional": false,
+              "fuente": {
+                "idReferencia": 0,
+                "nombreReferencia": "Directo"
+              },
+              "estructura": {
+                "esObjeto": true,
+                "esArray": false,
+                "propiedades": [
+                  {
+                    "nombre": "T_Nombres",
+                    "tipo": "string",
+                    "opcional": false
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "endpoint": "/Servicios/wcfbusquedacliente.svc/F_Buscar_Cliente_AutoComplete",
+          "nombreReferencia": "Buscar Cliente",
+          "descripcion": "Busca clientes enviando objeto con str_nombres (string, texto parcial), str_flag (string, ejemplo 0) y flg_seguimiento (string, ejemplo 0).",
+          "metodo": "POST",
+          "parametros": [
+            {
+              "nombre": "request",
+              "tipo": "object",
+              "obligatorio": false,
+              "opcional": false,
+              "fuente": {
+                "idReferencia": 0,
+                "nombreReferencia": "Directo"
+              },
+              "estructura": {
+                "esObjeto": true,
+                "esArray": false,
+                "propiedades": [
+                  {
+                    "nombre": "str_nombres",
+                    "tipo": "string",
+                    "opcional": false
+                  },
+                  {
+                    "nombre": "str_flag",
+                    "tipo": "string",
+                    "opcional": false
+                  },
+                  {
+                    "nombre": "flg_seguimiento",
+                    "tipo": "string",
+                    "opcional": false
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "endpoint": "/Servicios/wcfServicios.svc/F_Buscar_Usuario_AutoComplete",
+          "nombreReferencia": "Buscar Usuario",
+          "descripcion": "Busca usuarios enviando objeto con descripcion parcial para autocompletado.",
+          "metodo": "POST",
+          "parametros": [
+            {
+              "nombre": "request",
+              "tipo": "object",
+              "obligatorio": false,
+              "opcional": false,
+              "fuente": {
+                "idReferencia": 0,
+                "nombreReferencia": "Directo"
+              },
+              "estructura": {
+                "esObjeto": true,
+                "esArray": false,
+                "propiedades": []
+              }
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "endpoint": "/Servicios/wcfbusquedabodytablamaestraempresa.svc/GetAllTablaEmpresaByCodigoTabla_response",
+          "nombreReferencia": "Obtener Tipos Documento",
+          "descripcion": "Obtiene tipos de documento enviando objeto con str_codigo_tabla (string, T0007), b_DataBase (boolean, false) y str_codigo_regla (string, 0014).",
+          "metodo": "POST",
+          "parametros": [
+            {
+              "nombre": "request",
+              "tipo": "object",
+              "obligatorio": true,
+              "opcional": false,
+              "fuente": {
+                "idReferencia": 0,
+                "nombreReferencia": "Directo"
+              },
+              "estructura": {
+                "esObjeto": true,
+                "esArray": false,
+                "propiedades": [
+                  {
+                    "nombre": "str_codigo_tabla",
+                    "tipo": "string",
+                    "opcional": false
+                  },
+                  {
+                    "nombre": "b_DataBase",
+                    "tipo": "boolean",
+                    "opcional": false
+                  },
+                  {
+                    "nombre": "str_codigo_regla",
+                    "tipo": "string",
+                    "opcional": false
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "endpoint": "/Servicios/wcfbusquedabodytablamaestrasistema.svc/GetAllTablaSistemaByCodigoTabla",
+          "nombreReferencia": "Obtener Estados Documento",
+          "descripcion": "Obtiene estados enviando objeto con str_codigo_tabla (string, 000083) y b_DataBase (boolean, false).",
+          "metodo": "POST",
+          "parametros": [
+            {
+              "nombre": "request",
+              "tipo": "object",
+              "obligatorio": true,
+              "opcional": false,
+              "fuente": {
+                "idReferencia": 0,
+                "nombreReferencia": "Directo"
+              },
+              "estructura": {
+                "esObjeto": true,
+                "esArray": false,
+                "propiedades": [
+                  {
+                    "nombre": "str_codigo_tabla",
+                    "tipo": "string",
+                    "opcional": false
+                  },
+                  {
+                    "nombre": "b_DataBase",
+                    "tipo": "boolean",
+                    "opcional": false
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "endpoint": "/Servicios/wcfbusquedabodytablamaestraempresa.svc/GetAllTablaEmpresaByCodigoTabla_response",
+          "nombreReferencia": "Obtener Monedas",
+          "descripcion": "Obtiene monedas enviando objeto con str_codigo_tabla (string, T0004), b_DataBase (boolean, false) y str_codigo_regla (string, vacio).",
+          "metodo": "POST",
+          "parametros": [
+            {
+              "nombre": "request",
+              "tipo": "object",
+              "obligatorio": true,
+              "opcional": false,
+              "fuente": {
+                "idReferencia": 0,
+                "nombreReferencia": "Directo"
+              },
+              "estructura": {
+                "esObjeto": true,
+                "esArray": false,
+                "propiedades": [
+                  {
+                    "nombre": "str_codigo_tabla",
+                    "tipo": "string",
+                    "opcional": false
+                  },
+                  {
+                    "nombre": "b_DataBase",
+                    "tipo": "boolean",
+                    "opcional": false
+                  },
+                  {
+                    "nombre": "str_codigo_regla",
+                    "tipo": "string",
+                    "opcional": false
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "endpoint": "/Servicios/wcfbusquedaformapago.svc/Fun_Buscar_FormaPago_Lista_Registros_NET",
+          "nombreReferencia": "Obtener Formas Pago",
+          "descripcion": "Obtiene formas de pago enviando objeto con sTipo (string, PV).",
+          "metodo": "POST",
+          "parametros": [
+            {
+              "nombre": "request",
+              "tipo": "object",
+              "obligatorio": true,
+              "opcional": false,
+              "fuente": {
+                "idReferencia": 0,
+                "nombreReferencia": "Directo"
+              },
+              "estructura": {
+                "esObjeto": true,
+                "esArray": false,
+                "propiedades": [
+                  {
+                    "nombre": "sTipo",
+                    "tipo": "string",
+                    "opcional": false
+                  }
+                ]
+              }
+            }
+          ]
         }
       ],
-      "UPDATE": [],
-      "DELETE": []
+      "actualizar": [],
+      "eliminar": []
     }
-  }
+  ]
 }
