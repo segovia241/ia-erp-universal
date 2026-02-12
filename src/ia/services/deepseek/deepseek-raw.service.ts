@@ -14,7 +14,8 @@ export class DeepSeekRawService {
   private readonly baseUrl: string;
   private config: ConfiguracionAPI;
   private readonly modulosDisponibles: string[];
-  private readonly accionesDisponibles = ["leer", "crear", "actualizar", "eliminar"];
+  private readonly accionesDisponibles = ["leer", "crear", "actualizar", "eliminar"] as const;
+  type AccionCRUD = typeof this.accionesDisponibles[number];
 
   constructor() {
     this.apiKey = process.env.DEEPSEEK_API_KEY || "";
@@ -113,10 +114,10 @@ IMPORTANTE:
       contexto += `\n========== MÓDULO: ${modulo.nombre} ==========\n`;
       
       for (const accion of this.accionesDisponibles) {
-        const endpoints = modulo[accion];
+        const endpoints = modulo[accion] as Endpoint[];
         if (endpoints && endpoints.length > 0) {
           contexto += `\n--- ACCIÓN: ${accion.toUpperCase()} ---\n`;
-          endpoints.forEach(ep => {
+          endpoints.forEach((ep: Endpoint) => {
             contexto += `\n📌 ENDPOINT: ${ep.endpoint}\n`;
             contexto += `   Nombre: ${ep.nombreReferencia}\n`;
             contexto += `   Descripción: ${ep.descripcion}\n`;
@@ -124,11 +125,11 @@ IMPORTANTE:
             contexto += `\n   📦 ESTRUCTURA EXACTA DEL PAYLOAD:\n`;
             
             // Mostrar la estructura EXACTA que debe enviarse
-            ep.parametros.forEach(param => {
+            ep.parametros.forEach((param: any) => {
               if (param.estructura?.esObjeto) {
                 contexto += `   {\n`;
                 contexto += `     "${param.nombre}": {\n`;
-                param.estructura.propiedades?.forEach(prop => {
+                param.estructura.propiedades?.forEach((prop: any) => {
                   contexto += `       "${prop.nombre}": "${prop.tipo}"${prop.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
                 });
                 contexto += `     }\n`;
@@ -138,7 +139,7 @@ IMPORTANTE:
                 contexto += `\n   ✅ EJEMPLO DE PAYLOAD CORRECTO:\n`;
                 contexto += `   {\n`;
                 contexto += `     "${param.nombre}": {\n`;
-                param.estructura.propiedades?.forEach((prop, index) => {
+                param.estructura.propiedades?.forEach((prop: any, index: number) => {
                   let valorEjemplo = '';
                   if (prop.tipo === 'string') valorEjemplo = '"texto de búsqueda"';
                   if (prop.tipo === 'int') valorEjemplo = '123';
@@ -226,7 +227,7 @@ IMPORTANTE:
       };
     }
 
-    if (!this.accionesDisponibles.includes(accion)) {
+    if (!this.accionesDisponibles.includes(accion as AccionCRUD)) {
       return {
         valido: false,
         mensaje: `La acción '${accion}' no es válida. Acciones disponibles: ${this.accionesDisponibles.join(', ')}`
@@ -244,7 +245,8 @@ IMPORTANTE:
     if (!moduloConfig) return null;
 
     for (const accion of this.accionesDisponibles) {
-      const endpoint = moduloConfig[accion].find(ep => ep.endpoint === ruta);
+      const endpoints = moduloConfig[accion] as Endpoint[];
+      const endpoint = endpoints.find((ep: Endpoint) => ep.endpoint === ruta);
       if (endpoint) return endpoint;
     }
 
@@ -351,12 +353,12 @@ IMPORTANTE:
   private normalizarPayload(endpoint: Endpoint, payloadRecibido: any, mensajeUsuario: string): any {
     const payloadNormalizado: any = {};
     
-    endpoint.parametros.forEach(param => {
+    endpoint.parametros.forEach((param: any) => {
       if (param.estructura?.esObjeto) {
         // Si el payload ya tiene el objeto, usarlo, si no crearlo
         payloadNormalizado[param.nombre] = payloadRecibido[param.nombre] || {};
         
-        param.estructura.propiedades?.forEach(prop => {
+        param.estructura.propiedades?.forEach((prop: any) => {
           // Si la propiedad ya existe en el payload recibido, mantenerla
           if (payloadRecibido[param.nombre]?.[prop.nombre]) {
             payloadNormalizado[param.nombre][prop.nombre] = payloadRecibido[param.nombre][prop.nombre];
@@ -382,7 +384,7 @@ IMPORTANTE:
           if (param.tipo === 'string') {
             payloadNormalizado[param.nombre] = valorExtraido !== null ? valorExtraido : '';
           } else if (param.tipo === 'int') {
-            const valorNumerico = valorExtraido ? parseInt(valorExtraido, 10) : 0;
+            const valorNumerico = valorExtraido ? parseInt(valExtraido, 10) : 0;
             payloadNormalizado[param.nombre] = isNaN(valorNumerico) ? 0 : valorNumerico;
           } else if (param.tipo === 'boolean') {
             payloadNormalizado[param.nombre] = false;
@@ -413,13 +415,13 @@ IMPORTANTE:
   private construirPayloadDesdeMensaje(endpoint: Endpoint, mensaje: string): any {
     const payload: any = {};
     
-    endpoint.parametros.forEach(param => {
+    endpoint.parametros.forEach((param: any) => {
       if (param.estructura?.esObjeto) {
         // Crear el objeto contenedor
         payload[param.nombre] = {};
         
         // Llenar las propiedades del objeto
-        param.estructura.propiedades?.forEach(prop => {
+        param.estructura.propiedades?.forEach((prop: any) => {
           const valorExtraido = this.extraerValorDeMensaje(mensaje, prop.nombre);
           
           if (prop.tipo === 'string') {
