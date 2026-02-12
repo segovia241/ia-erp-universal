@@ -10,7 +10,9 @@ export class DeepSeekService {
     });
   }
 
-  async createChatCompletion(messages: { role: string; content: string }[]) {
+  async createChatCompletion(
+    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+  ) {
     const completion = await this.client.chat.completions.create({
       model: "deepseek-chat",
       messages,
