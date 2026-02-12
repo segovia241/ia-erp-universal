@@ -41,12 +41,15 @@ export class DeepSeekRawService {
   }
 
   /**
-   * Genera el system prompt dinámico con los módulos disponibles y SUS ENDPOINTS
+   * Genera el system prompt dinámico con TODOS los endpoints disponibles
    */
   private generarSystemPrompt(): string {
     const listaModulos = this.modulosDisponibles
       .map(mod => `   - ${mod}`)
       .join('\n');
+
+    // Generar contexto completo de todos los endpoints disponibles
+    const contextoEndpoints = this.generarContextoEndpoints();
 
     return `
 Eres un asistente inteligente dentro de un ERP.
@@ -63,6 +66,9 @@ ACCIONES CRUD:
 - actualizar (modificar, editar, cambiar)
 - eliminar (borrar, quitar, remover)
 
+============================================================
+ENDPOINTS DISPONIBLES POR MÓDULO Y ACCIÓN:
+${contextoEndpoints}
 ============================================================
 
 Tu respuesta DEBE ser JSON con esta estructura EXACTA:
@@ -84,14 +90,44 @@ REGLAS CRÍTICAS - OBLIGATORIAS:
 1. SIEMPRE debes seleccionar UN endpoint específico, NUNCA preguntar
 2. El endpoint debe ser el MÁS RELEVANTE para lo que pide el usuario
 3. El payload debe coincidir EXACTAMENTE con la estructura del endpoint
-4. Si el usuario menciona "pacientes" USA el endpoint de Listar Pacientes
-5. Si el usuario menciona "medicos" USA el endpoint de Listar Medicos
-6. Si el usuario menciona "clientes" USA el endpoint de Buscar Cliente
-7. NUNCA devuelvas una lista de endpoints - SIEMPRE uno específico
-8. NO agregues texto fuera del JSON
+4. Usa la lista de ENDPOINTS DISPONIBLES arriba para seleccionar el más apropiado
+5. NUNCA devuelvas una lista de endpoints - SIEMPRE uno específico
+6. NO agregues texto fuera del JSON
 
-IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más apropiado de los disponibles en el módulo indicado.
+IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más apropiado de la lista de endpoints disponibles.
 `;
+  }
+
+  /**
+   * Genera un string con TODOS los endpoints disponibles para que la IA los conozca
+   */
+  private generarContextoEndpoints(): string {
+    let contexto = '';
+    
+    for (const modulo of this.config.modulos) {
+      contexto += `\n--- MÓDULO: ${modulo.nombre} ---\n`;
+      
+      for (const accion of this.accionesDisponibles) {
+        const endpoints = modulo[accion];
+        if (endpoints && endpoints.length > 0) {
+          contexto += `\n[ACCIÓN: ${accion}]\n`;
+          endpoints.forEach(ep => {
+            contexto += `  • Endpoint: ${ep.endpoint}\n`;
+            contexto += `    Nombre: ${ep.nombreReferencia}\n`;
+            contexto += `    Descripción: ${ep.descripcion}\n`;
+            contexto += `    Método: ${ep.metodo}\n`;
+            contexto += `    Parámetros: ${JSON.stringify(ep.parametros.map(p => ({
+              nombre: p.nombre,
+              tipo: p.tipo,
+              obligatorio: p.obligatorio,
+              estructura: p.estructura
+            })), null, 2)}\n\n`;
+          });
+        }
+      }
+    }
+    
+    return contexto;
   }
 
   async sendRawMessage(message: string): Promise<any> {
@@ -166,6 +202,21 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
   }
 
   /**
+   * Busca un endpoint por su ruta en un módulo específico
+   */
+  private buscarEndpointPorRuta(modulo: string, ruta: string): Endpoint | null {
+    const moduloConfig = this.config.modulos.find(m => m.nombre === modulo);
+    if (!moduloConfig) return null;
+
+    for (const accion of this.accionesDisponibles) {
+      const endpoint = moduloConfig[accion].find(ep => ep.endpoint === ruta);
+      if (endpoint) return endpoint;
+    }
+
+    return null;
+  }
+
+  /**
    * Procesa una acción: valida módulo y endpoint seleccionado por la IA
    */
   private async procesarAccion(
@@ -194,7 +245,7 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
 
     // 2. Validar acción
     if (!respuestaIA.accion) {
-      respuestaIA.accion = 'leer'; // Por defecto
+      respuestaIA.accion = 'leer';
     }
 
     const validacionAccion = this.validarAccion(respuestaIA.accion);
@@ -208,8 +259,15 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
       };
     }
 
-    // 3. Si la IA no seleccionó endpoint, lo seleccionamos nosotros
-    if (!respuestaIA.endpoint) {
+    // 3. Verificar que el endpoint existe en el módulo
+    let endpoint: Endpoint | null = null;
+    
+    if (respuestaIA.endpoint) {
+      endpoint = this.buscarEndpointPorRuta(respuestaIA.modulo, respuestaIA.endpoint);
+    }
+
+    // 4. Si no hay endpoint válido, tomar el primero disponible
+    if (!endpoint) {
       const endpoints = this.obtenerEndpointsPorModuloYAccion(respuestaIA.modulo, respuestaIA.accion);
       
       if (endpoints.length === 0) {
@@ -222,49 +280,25 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
         };
       }
 
-      const endpointSeleccionado = this.seleccionarEndpointRelevante(endpoints, mensajeUsuario);
-      const payload = this.construirPayloadDesdeMensaje(endpointSeleccionado, mensajeUsuario);
-      
-      return {
-        tipo: 'ACCION',
-        mensaje: `✅ Voy a ${this.obtenerVerboAccion(respuestaIA.accion)} en ${respuestaIA.modulo}`,
-        modulo: respuestaIA.modulo,
-        accion: respuestaIA.accion,
-        endpoint: endpointSeleccionado.endpoint,
-        method: endpointSeleccionado.metodo,
-        payload: payload,
-        requiereFiltros: false,
-        endpointId: endpointSeleccionado.id
-      };
+      endpoint = endpoints[0];
     }
 
-    // 4. Si la IA seleccionó endpoint, verificamos que exista
-    const todosEndpoints = this.obtenerTodosEndpointsPorModulo(respuestaIA.modulo);
-    const endpointValido = todosEndpoints.find(ep => ep.endpoint === respuestaIA.endpoint);
+    // 5. Construir payload
+    let payload = respuestaIA.payload;
     
-    if (!endpointValido) {
-      // Si el endpoint no es válido, tomamos el más relevante
-      const endpoints = this.obtenerEndpointsPorModuloYAccion(respuestaIA.modulo, respuestaIA.accion);
-      if (endpoints.length > 0) {
-        const endpointSeleccionado = this.seleccionarEndpointRelevante(endpoints, mensajeUsuario);
-        const payload = respuestaIA.payload || this.construirPayloadDesdeMensaje(endpointSeleccionado, mensajeUsuario);
-        
-        return {
-          tipo: 'ACCION',
-          mensaje: `✅ ${respuestaIA.mensaje || `Voy a ${this.obtenerVerboAccion(respuestaIA.accion)} en ${respuestaIA.modulo}`}`,
-          modulo: respuestaIA.modulo,
-          accion: respuestaIA.accion,
-          endpoint: endpointSeleccionado.endpoint,
-          method: endpointSeleccionado.metodo,
-          payload: payload,
-          requiereFiltros: false,
-          endpointId: endpointSeleccionado.id
-        };
-      }
+    if (!payload || Object.keys(payload).length === 0) {
+      payload = this.construirPayloadDesdeMensaje(endpoint, mensajeUsuario);
     }
 
-    // 5. Todo está bien con el endpoint seleccionado por la IA
-    const endpoint = endpointValido || await this.obtenerEndpointPorDefecto(respuestaIA.modulo, respuestaIA.accion);
+    // 6. Validar payload (opcional - podemos omitir validación estricta)
+    const validacion = validarPayload(endpoint, payload);
+    
+    // Completar campos faltantes con valores por defecto
+    if (validacion.faltantes.length > 0 || validacion.erroresTipo.length > 0) {
+      payload = this.completarPayloadFaltante(endpoint, payload);
+    }
+
+    // 7. Construir respuesta
     const urlCompleta = `${this.config.empresa.baseUrl}${endpoint.endpoint}`;
     
     return {
@@ -274,33 +308,11 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
       accion: respuestaIA.accion,
       endpoint: endpoint.endpoint,
       urlCompleta: urlCompleta,
-      payload: respuestaIA.payload || this.construirPayloadDesdeMensaje(endpoint, mensajeUsuario),
+      payload: payload,
       method: endpoint.metodo,
       requiereFiltros: false,
       endpointId: endpoint.id
     };
-  }
-
-  /**
-   * Obtiene todos los endpoints de un módulo (todas las acciones)
-   */
-  private obtenerTodosEndpointsPorModulo(modulo: string): Endpoint[] {
-    let todos: Endpoint[] = [];
-    for (const accion of this.accionesDisponibles) {
-      todos = todos.concat(this.obtenerEndpointsPorModuloYAccion(modulo, accion));
-    }
-    return todos;
-  }
-
-  /**
-   * Obtiene un endpoint por defecto para un módulo/acción
-   */
-  private async obtenerEndpointPorDefecto(modulo: string, accion: string): Promise<Endpoint> {
-    const endpoints = this.obtenerEndpointsPorModuloYAccion(modulo, accion);
-    if (endpoints.length === 0) {
-      throw new Error(`No hay endpoints disponibles para ${modulo}/${accion}`);
-    }
-    return endpoints[0];
   }
 
   /**
@@ -317,43 +329,10 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
   }
 
   /**
-   * Selecciona el endpoint más relevante basado en el mensaje del usuario
-   */
-  private seleccionarEndpointRelevante(endpoints: Endpoint[], mensaje: string): Endpoint {
-    const mensajeLower = mensaje.toLowerCase();
-    
-    // Priorizar endpoints específicos basados en palabras clave
-    for (const endpoint of endpoints) {
-      const nombre = endpoint.nombreReferencia.toLowerCase();
-      const descripcion = endpoint.descripcion.toLowerCase();
-      
-      if (nombre.includes('pacientes') && mensajeLower.includes('paciente')) {
-        return endpoint;
-      }
-      if (nombre.includes('medicos') && mensajeLower.includes('medico')) {
-        return endpoint;
-      }
-      if (nombre.includes('clientes') && mensajeLower.includes('cliente')) {
-        return endpoint;
-      }
-      if (nombre.includes('usuario') && mensajeLower.includes('usuario')) {
-        return endpoint;
-      }
-      if (descripcion.includes('documento') && mensajeLower.includes('documento')) {
-        return endpoint;
-      }
-    }
-    
-    // Si no hay coincidencia específica, devolver el primero
-    return endpoints[0];
-  }
-
-  /**
    * Construye un payload basado en el mensaje del usuario
    */
   private construirPayloadDesdeMensaje(endpoint: Endpoint, mensaje: string): any {
     const payload: any = {};
-    const mensajeLower = mensaje.toLowerCase();
     
     endpoint.parametros.forEach(param => {
       if (param.estructura?.esObjeto) {
@@ -362,10 +341,8 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
           const valorExtraido = this.extraerValorDeMensaje(mensaje, prop.nombre);
           
           if (prop.tipo === 'string') {
-            // Para string, usar el valor extraído o cadena vacía
             payload[param.nombre][prop.nombre] = valorExtraido !== null ? valorExtraido : '';
           } else if (prop.tipo === 'int') {
-            // Para int, convertir a número o 0 si es null
             const valorNumerico = valorExtraido ? parseInt(valorExtraido, 10) : 0;
             payload[param.nombre][prop.nombre] = isNaN(valorNumerico) ? 0 : valorNumerico;
           } else if (prop.tipo === 'boolean') {
@@ -386,23 +363,41 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
       }
     });
     
-    // Si es el endpoint de Listar Pacientes y no se extrajo valor, usar el texto completo
-    if (endpoint.nombreReferencia === 'Listar Pacientes' && 
-        payload.oEntity && 
-        payload.oEntity.T_Descripcion === '') {
-      
-      // Intentar extraer el apellido/nombre del mensaje
-      const match = mensaje.match(/apellido\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i) || 
-                   mensaje.match(/paciente\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i) ||
-                   mensaje.match(/con\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i) ||
-                   mensaje.match(/([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)$/i);
-      
-      if (match && match[1]) {
-        payload.oEntity.T_Descripcion = match[1].trim().toUpperCase();
-      }
-    }
-    
     return payload;
+  }
+
+  /**
+   * Completa el payload con valores vacíos para campos faltantes
+   */
+  private completarPayloadFaltante(endpoint: Endpoint, payloadParcial: any): any {
+    const payloadCompleto = { ...payloadParcial };
+    
+    endpoint.parametros.forEach(param => {
+      if (!payloadCompleto[param.nombre]) {
+        if (param.estructura?.esObjeto) {
+          payloadCompleto[param.nombre] = {};
+          param.estructura.propiedades?.forEach(prop => {
+            if (prop.tipo === 'string') {
+              payloadCompleto[param.nombre][prop.nombre] = '';
+            } else if (prop.tipo === 'int') {
+              payloadCompleto[param.nombre][prop.nombre] = 0;
+            } else if (prop.tipo === 'boolean') {
+              payloadCompleto[param.nombre][prop.nombre] = false;
+            }
+          });
+        } else {
+          if (param.tipo === 'string') {
+            payloadCompleto[param.nombre] = '';
+          } else if (param.tipo === 'int') {
+            payloadCompleto[param.nombre] = 0;
+          } else if (param.tipo === 'boolean') {
+            payloadCompleto[param.nombre] = false;
+          }
+        }
+      }
+    });
+    
+    return payloadCompleto;
   }
 
   /**
@@ -415,31 +410,13 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
       .replace('str_', '')
       .replace('_', '');
     
-    // Patrones específicos para T_Descripcion (búsqueda de pacientes)
-    if (nombreCampo === 'T_Descripcion') {
-      const patronesDescripcion = [
-        /apellido\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
-        /paciente\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
-        /nombre\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
-        /con\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
-        /buscar\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
-        /listar\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i
-      ];
-      
-      for (const patron of patronesDescripcion) {
-        const match = mensaje.match(patron);
-        if (match && match[1]) {
-          return match[1].trim();
-        }
-      }
-    }
-    
-    // Patrones generales
+    // Patrones generales de extracción
     const patrones = [
-      new RegExp(`${campoLower}\\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\\s]+)`, 'i'),
-      new RegExp(`([a-zA-ZáéíóúÁÉÍÓÚñÑ\\s]+)\\s+${campoLower}`, 'i'),
-      new RegExp(`con\\s+${campoLower}\\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\\s]+)`, 'i'),
-      new RegExp(`de\\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\\s]+)`, 'i')
+      new RegExp(`${campoLower}\\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\\s]+)`, 'i'),
+      new RegExp(`([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\\s]+)\\s+${campoLower}`, 'i'),
+      new RegExp(`con\\s+${campoLower}\\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\\s]+)`, 'i'),
+      new RegExp(`de\\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\\s]+)`, 'i'),
+      new RegExp(`:?\\s*([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\\s]+)$`, 'i')
     ];
     
     for (const patron of patrones) {
