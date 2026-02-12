@@ -41,15 +41,14 @@ export class DeepSeekRawService {
   }
 
   /**
-   * Genera el system prompt dinámico con TODOS los endpoints disponibles
+   * Genera el system prompt dinámico con la ESTRUCTURA EXACTA de cada endpoint
    */
   private generarSystemPrompt(): string {
     const listaModulos = this.modulosDisponibles
       .map(mod => `   - ${mod}`)
       .join('\n');
 
-    // Generar contexto completo de todos los endpoints disponibles
-    const contextoEndpoints = this.generarContextoEndpoints();
+    const contextoEndpoints = this.generarContextoEndpointsConEstructuraExacta();
 
     return `
 Eres un asistente inteligente dentro de un ERP.
@@ -67,7 +66,7 @@ ACCIONES CRUD:
 - eliminar (borrar, quitar, remover)
 
 ============================================================
-ENDPOINTS DISPONIBLES POR MÓDULO Y ACCIÓN:
+ENDPOINTS DISPONIBLES CON SU ESTRUCTURA EXACTA DE PAYLOAD:
 ${contextoEndpoints}
 ============================================================
 
@@ -81,47 +80,83 @@ Tu respuesta DEBE ser JSON con esta estructura EXACTA:
   "endpoint": "Ruta completa del endpoint seleccionado",
   "method": "POST|GET|PUT|DELETE",
   "payload": {
-    // Objeto con los parámetros exactos que espera el endpoint
-    // Debes inferir los valores del mensaje del usuario
+    // EL PAYLOAD DEBE SER EXACTAMENTE IGUAL A LA ESTRUCTURA MOSTRADA ARRIBA
+    // NO inventes nombres de campos, USA LOS NOMBRES EXACTOS de los parámetros
+    // RESPETA la estructura anidada de los objetos
   }
 }
 
 REGLAS CRÍTICAS - OBLIGATORIAS:
 1. SIEMPRE debes seleccionar UN endpoint específico, NUNCA preguntar
 2. El endpoint debe ser el MÁS RELEVANTE para lo que pide el usuario
-3. El payload debe coincidir EXACTAMENTE con la estructura del endpoint
-4. Usa la lista de ENDPOINTS DISPONIBLES arriba para seleccionar el más apropiado
-5. NUNCA devuelvas una lista de endpoints - SIEMPRE uno específico
-6. NO agregues texto fuera del JSON
+3. El payload debe tener EXACTAMENTE la misma estructura que el endpoint requiere
+4. NO inventes nombres de campos - USA los nombres exactos de los parámetros
+5. Si el endpoint espera un objeto anidado, DEBES enviar ese objeto anidado
+6. NUNCA devuelvas una lista de endpoints - SIEMPRE uno específico
+7. NO agregues texto fuera del JSON
 
-IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más apropiado de la lista de endpoints disponibles.
+IMPORTANTE: 
+- Respeta la estructura anidada de los objetos
+- Usa los nombres de campos EXACTOS que aparecen en la descripción del endpoint
+- Si el parámetro es un objeto, DEBE ir dentro de ese objeto
+- Ejemplo: { "oEntity": { "T_Descripcion": "valor" } } NO { "apellido": "valor" }
 `;
   }
 
   /**
-   * Genera un string con TODOS los endpoints disponibles para que la IA los conozca
+   * Genera un string con TODOS los endpoints y su ESTRUCTURA EXACTA de payload
    */
-  private generarContextoEndpoints(): string {
+  private generarContextoEndpointsConEstructuraExacta(): string {
     let contexto = '';
     
     for (const modulo of this.config.modulos) {
-      contexto += `\n--- MÓDULO: ${modulo.nombre} ---\n`;
+      contexto += `\n========== MÓDULO: ${modulo.nombre} ==========\n`;
       
       for (const accion of this.accionesDisponibles) {
         const endpoints = modulo[accion];
         if (endpoints && endpoints.length > 0) {
-          contexto += `\n[ACCIÓN: ${accion}]\n`;
+          contexto += `\n--- ACCIÓN: ${accion.toUpperCase()} ---\n`;
           endpoints.forEach(ep => {
-            contexto += `  • Endpoint: ${ep.endpoint}\n`;
-            contexto += `    Nombre: ${ep.nombreReferencia}\n`;
-            contexto += `    Descripción: ${ep.descripcion}\n`;
-            contexto += `    Método: ${ep.metodo}\n`;
-            contexto += `    Parámetros: ${JSON.stringify(ep.parametros.map(p => ({
-              nombre: p.nombre,
-              tipo: p.tipo,
-              obligatorio: p.obligatorio,
-              estructura: p.estructura
-            })), null, 2)}\n\n`;
+            contexto += `\n📌 ENDPOINT: ${ep.endpoint}\n`;
+            contexto += `   Nombre: ${ep.nombreReferencia}\n`;
+            contexto += `   Descripción: ${ep.descripcion}\n`;
+            contexto += `   Método: ${ep.metodo}\n`;
+            contexto += `\n   📦 ESTRUCTURA EXACTA DEL PAYLOAD:\n`;
+            
+            // Mostrar la estructura EXACTA que debe enviarse
+            ep.parametros.forEach(param => {
+              if (param.estructura?.esObjeto) {
+                contexto += `   {\n`;
+                contexto += `     "${param.nombre}": {\n`;
+                param.estructura.propiedades?.forEach(prop => {
+                  contexto += `       "${prop.nombre}": "${prop.tipo}"${prop.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
+                });
+                contexto += `     }\n`;
+                contexto += `   }\n`;
+                
+                // EJEMPLO CONCRETO con valores de ejemplo
+                contexto += `\n   ✅ EJEMPLO DE PAYLOAD CORRECTO:\n`;
+                contexto += `   {\n`;
+                contexto += `     "${param.nombre}": {\n`;
+                param.estructura.propiedades?.forEach((prop, index) => {
+                  let valorEjemplo = '';
+                  if (prop.tipo === 'string') valorEjemplo = '"texto de búsqueda"';
+                  if (prop.tipo === 'int') valorEjemplo = '123';
+                  if (prop.tipo === 'boolean') valorEjemplo = 'false';
+                  contexto += `       "${prop.nombre}": ${valorEjemplo}`;
+                  if (index < param.estructura!.propiedades!.length - 1) contexto += `,`;
+                  contexto += `\n`;
+                });
+                contexto += `     }\n`;
+                contexto += `   }\n`;
+                
+              } else {
+                contexto += `   {\n`;
+                contexto += `     "${param.nombre}": "${param.tipo}"\n`;
+                contexto += `   }\n`;
+              }
+            });
+            contexto += `\n${'─'.repeat(80)}\n`;
           });
         }
       }
@@ -283,22 +318,17 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
       endpoint = endpoints[0];
     }
 
-    // 5. Construir payload
+    // 5. Construir payload con la estructura correcta
     let payload = respuestaIA.payload;
     
     if (!payload || Object.keys(payload).length === 0) {
       payload = this.construirPayloadDesdeMensaje(endpoint, mensajeUsuario);
+    } else {
+      // Asegurar que el payload tenga la estructura correcta
+      payload = this.normalizarPayload(endpoint, payload, mensajeUsuario);
     }
 
-    // 6. Validar payload (opcional - podemos omitir validación estricta)
-    const validacion = validarPayload(endpoint, payload);
-    
-    // Completar campos faltantes con valores por defecto
-    if (validacion.faltantes.length > 0 || validacion.erroresTipo.length > 0) {
-      payload = this.completarPayloadFaltante(endpoint, payload);
-    }
-
-    // 7. Construir respuesta
+    // 6. Construir respuesta
     const urlCompleta = `${this.config.empresa.baseUrl}${endpoint.endpoint}`;
     
     return {
@@ -316,6 +346,55 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
   }
 
   /**
+   * Normaliza el payload para que tenga la estructura correcta según el endpoint
+   */
+  private normalizarPayload(endpoint: Endpoint, payloadRecibido: any, mensajeUsuario: string): any {
+    const payloadNormalizado: any = {};
+    
+    endpoint.parametros.forEach(param => {
+      if (param.estructura?.esObjeto) {
+        // Si el payload ya tiene el objeto, usarlo, si no crearlo
+        payloadNormalizado[param.nombre] = payloadRecibido[param.nombre] || {};
+        
+        param.estructura.propiedades?.forEach(prop => {
+          // Si la propiedad ya existe en el payload recibido, mantenerla
+          if (payloadRecibido[param.nombre]?.[prop.nombre]) {
+            payloadNormalizado[param.nombre][prop.nombre] = payloadRecibido[param.nombre][prop.nombre];
+          } else {
+            // Si no, intentar extraerla del mensaje
+            const valorExtraido = this.extraerValorDeMensaje(mensajeUsuario, prop.nombre);
+            if (prop.tipo === 'string') {
+              payloadNormalizado[param.nombre][prop.nombre] = valorExtraido !== null ? valorExtraido.toUpperCase() : '';
+            } else if (prop.tipo === 'int') {
+              const valorNumerico = valorExtraido ? parseInt(valorExtraido, 10) : 0;
+              payloadNormalizado[param.nombre][prop.nombre] = isNaN(valorNumerico) ? 0 : valorNumerico;
+            } else if (prop.tipo === 'boolean') {
+              payloadNormalizado[param.nombre][prop.nombre] = false;
+            }
+          }
+        });
+      } else {
+        // Parámetro simple
+        if (payloadRecibido[param.nombre]) {
+          payloadNormalizado[param.nombre] = payloadRecibido[param.nombre];
+        } else {
+          const valorExtraido = this.extraerValorDeMensaje(mensajeUsuario, param.nombre);
+          if (param.tipo === 'string') {
+            payloadNormalizado[param.nombre] = valorExtraido !== null ? valorExtraido : '';
+          } else if (param.tipo === 'int') {
+            const valorNumerico = valorExtraido ? parseInt(valorExtraido, 10) : 0;
+            payloadNormalizado[param.nombre] = isNaN(valorNumerico) ? 0 : valorNumerico;
+          } else if (param.tipo === 'boolean') {
+            payloadNormalizado[param.nombre] = false;
+          }
+        }
+      }
+    });
+    
+    return payloadNormalizado;
+  }
+
+  /**
    * Obtiene el verbo de acción para mensajes naturales
    */
   private obtenerVerboAccion(accion: string): string {
@@ -329,19 +408,24 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
   }
 
   /**
-   * Construye un payload basado en el mensaje del usuario
+   * Construye un payload basado en el mensaje del usuario - CON ESTRUCTURA CORRECTA
    */
   private construirPayloadDesdeMensaje(endpoint: Endpoint, mensaje: string): any {
     const payload: any = {};
     
     endpoint.parametros.forEach(param => {
       if (param.estructura?.esObjeto) {
+        // Crear el objeto contenedor
         payload[param.nombre] = {};
+        
+        // Llenar las propiedades del objeto
         param.estructura.propiedades?.forEach(prop => {
           const valorExtraido = this.extraerValorDeMensaje(mensaje, prop.nombre);
           
           if (prop.tipo === 'string') {
-            payload[param.nombre][prop.nombre] = valorExtraido !== null ? valorExtraido : '';
+            payload[param.nombre][prop.nombre] = valorExtraido !== null 
+              ? valorExtraido.toUpperCase() 
+              : '';
           } else if (prop.tipo === 'int') {
             const valorNumerico = valorExtraido ? parseInt(valorExtraido, 10) : 0;
             payload[param.nombre][prop.nombre] = isNaN(valorNumerico) ? 0 : valorNumerico;
@@ -350,6 +434,7 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
           }
         });
       } else {
+        // Parámetro simple
         if (param.tipo === 'string') {
           const valorExtraido = this.extraerValorDeMensaje(mensaje, param.nombre);
           payload[param.nombre] = valorExtraido !== null ? valorExtraido : '';
@@ -367,44 +452,33 @@ IMPORTANTE: Basado en el mensaje del usuario, DEBES seleccionar el endpoint más
   }
 
   /**
-   * Completa el payload con valores vacíos para campos faltantes
-   */
-  private completarPayloadFaltante(endpoint: Endpoint, payloadParcial: any): any {
-    const payloadCompleto = { ...payloadParcial };
-    
-    endpoint.parametros.forEach(param => {
-      if (!payloadCompleto[param.nombre]) {
-        if (param.estructura?.esObjeto) {
-          payloadCompleto[param.nombre] = {};
-          param.estructura.propiedades?.forEach(prop => {
-            if (prop.tipo === 'string') {
-              payloadCompleto[param.nombre][prop.nombre] = '';
-            } else if (prop.tipo === 'int') {
-              payloadCompleto[param.nombre][prop.nombre] = 0;
-            } else if (prop.tipo === 'boolean') {
-              payloadCompleto[param.nombre][prop.nombre] = false;
-            }
-          });
-        } else {
-          if (param.tipo === 'string') {
-            payloadCompleto[param.nombre] = '';
-          } else if (param.tipo === 'int') {
-            payloadCompleto[param.nombre] = 0;
-          } else if (param.tipo === 'boolean') {
-            payloadCompleto[param.nombre] = false;
-          }
-        }
-      }
-    });
-    
-    return payloadCompleto;
-  }
-
-  /**
-   * Extrae un valor del mensaje del usuario
+   * Extrae un valor del mensaje del usuario - MEJORADO
    */
   private extraerValorDeMensaje(mensaje: string, nombreCampo: string): string | null {
     const mensajeLower = mensaje.toLowerCase();
+    
+    // Para T_Descripcion, buscar específicamente después de "apellido", "paciente", etc.
+    if (nombreCampo === 'T_Descripcion' || nombreCampo === 'str_nombres' || nombreCampo.includes('descripcion')) {
+      const patronesDescripcion = [
+        /apellido\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
+        /paciente\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
+        /cliente\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
+        /nombre\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
+        /medico\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
+        /usuario\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
+        /con\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
+        /buscar\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
+        /listar\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i
+      ];
+      
+      for (const patron of patronesDescripcion) {
+        const match = mensaje.match(patron);
+        if (match && match[1]) {
+          return match[1].trim();
+        }
+      }
+    }
+    
     const campoLower = nombreCampo.toLowerCase()
       .replace('t_', '')
       .replace('str_', '')
