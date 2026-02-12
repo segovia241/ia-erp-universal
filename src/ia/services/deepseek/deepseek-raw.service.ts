@@ -1,21 +1,24 @@
-// services/deepseek-raw.service.ts
+// src/ia/services/deepseek/deepseek-raw.service.ts
 import axios from "axios";
 import { IAResponseSchema } from "../../schemas/ia-response.schema";
 import { 
   cargarConfiguracion,
   obtenerEndpointsPorModuloYAccion,
-  validarPayload,
-  Endpoint,
-  ConfiguracionAPI
+  validarPayload
 } from "../../../erp/configs/api-config";
+import { 
+  Endpoint, 
+  ConfiguracionAPI, 
+  ModuloConAcciones,
+  AccionCRUD 
+} from "./api-config.types";
 
 export class DeepSeekRawService {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private config: ConfiguracionAPI;
   private readonly modulosDisponibles: string[];
-  private readonly accionesDisponibles = ["leer", "crear", "actualizar", "eliminar"] as const;
-  type AccionCRUD = typeof this.accionesDisponibles[number];
+  private readonly accionesDisponibles: AccionCRUD[] = ["leer", "crear", "actualizar", "eliminar"];
 
   constructor() {
     this.apiKey = process.env.DEEPSEEK_API_KEY || "";
@@ -33,7 +36,7 @@ export class DeepSeekRawService {
   /**
    * Obtiene todos los endpoints de un módulo y acción específicos
    */
-  private obtenerEndpointsPorModuloYAccion(modulo: string, accion: string): Endpoint[] {
+  private obtenerEndpointsPorModuloYAccion(modulo: string, accion: AccionCRUD): Endpoint[] {
     const resultado = obtenerEndpointsPorModuloYAccion(modulo, accion);
     if (resultado.success && resultado.data) {
       return resultado.data.flatMap(m => m.endpoints);
@@ -111,10 +114,11 @@ IMPORTANTE:
     let contexto = '';
     
     for (const modulo of this.config.modulos) {
+      const moduloConAcciones = modulo as ModuloConAcciones;
       contexto += `\n========== MÓDULO: ${modulo.nombre} ==========\n`;
       
       for (const accion of this.accionesDisponibles) {
-        const endpoints = modulo[accion] as Endpoint[];
+        const endpoints = moduloConAcciones[accion];
         if (endpoints && endpoints.length > 0) {
           contexto += `\n--- ACCIÓN: ${accion.toUpperCase()} ---\n`;
           endpoints.forEach((ep: Endpoint) => {
@@ -241,11 +245,11 @@ IMPORTANTE:
    * Busca un endpoint por su ruta en un módulo específico
    */
   private buscarEndpointPorRuta(modulo: string, ruta: string): Endpoint | null {
-    const moduloConfig = this.config.modulos.find(m => m.nombre === modulo);
+    const moduloConfig = this.config.modulos.find(m => m.nombre === modulo) as ModuloConAcciones | undefined;
     if (!moduloConfig) return null;
 
     for (const accion of this.accionesDisponibles) {
-      const endpoints = moduloConfig[accion] as Endpoint[];
+      const endpoints = moduloConfig[accion];
       const endpoint = endpoints.find((ep: Endpoint) => ep.endpoint === ruta);
       if (endpoint) return endpoint;
     }
@@ -305,7 +309,10 @@ IMPORTANTE:
 
     // 4. Si no hay endpoint válido, tomar el primero disponible
     if (!endpoint) {
-      const endpoints = this.obtenerEndpointsPorModuloYAccion(respuestaIA.modulo, respuestaIA.accion);
+      const endpoints = this.obtenerEndpointsPorModuloYAccion(
+        respuestaIA.modulo, 
+        respuestaIA.accion as AccionCRUD
+      );
       
       if (endpoints.length === 0) {
         return {
@@ -384,7 +391,7 @@ IMPORTANTE:
           if (param.tipo === 'string') {
             payloadNormalizado[param.nombre] = valorExtraido !== null ? valorExtraido : '';
           } else if (param.tipo === 'int') {
-            const valorNumerico = valorExtraido ? parseInt(valExtraido, 10) : 0;
+            const valorNumerico = valorExtraido ? parseInt(valorExtraido, 10) : 0;
             payloadNormalizado[param.nombre] = isNaN(valorNumerico) ? 0 : valorNumerico;
           } else if (param.tipo === 'boolean') {
             payloadNormalizado[param.nombre] = false;
