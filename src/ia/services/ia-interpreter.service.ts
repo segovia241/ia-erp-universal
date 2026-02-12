@@ -24,7 +24,7 @@ export class IAInterpreterService {
     this.erpConfigService = new ERPConfigService();
 
     if (this.FORCE_IA) {
-      this.motor = "IA";
+      this.motor = "DEEPSEEK";
     } else {
       this.motor = motor;
     }
