@@ -88,7 +88,7 @@ export class IAInterpreterService {
 
   setMotor(motor: IAMotor): void {
     if (this.FORCE_IA) {
-      this.motor = "IA";
+      this.motor = "DEEPSEEK";
     } else {
       this.motor = motor;
     }
