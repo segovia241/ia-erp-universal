@@ -1,13 +1,13 @@
 // services/deepseek-raw.service.ts
 import axios from "axios";
-import { IAResponseSchema } from "../../schemas/endpoint.schema";
+import { IAResponseSchema } from "../../schemas/ia-response.schema";
 import { 
   cargarConfiguracion,
   obtenerEndpointsPorModuloYAccion,
   validarPayload,
   Endpoint,
   ConfiguracionAPI
-} from "../../../erp/configs/api-config";
+} from "../../../erp/configs/api-config"; // Cambiamos la ruta a la correcta
 
 export class DeepSeekRawService {
   private readonly apiKey: string;
@@ -259,7 +259,7 @@ IMPORTANTE: Los nombres de los módulos deben ser escritos EXACTAMENTE como apar
       const modulosEncontrados = resultadoBusqueda.data || [];
       const listaEndpoints = modulosEncontrados
         .flatMap(m => m.endpoints)
-        .map((ep, index) => `  ${index + 1}. ${ep.nombreReferencia}: ${ep.descripcion}`)
+        .map((ep, index) => `  ${index + 1}. **${ep.nombreReferencia}**: ${ep.descripcion}`)
         .join('\n');
 
       return {
