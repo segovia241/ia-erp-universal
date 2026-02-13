@@ -46,7 +46,7 @@
           "metodo": "POST",
           "parametros": [
             {
-              "nombre": "request",
+              "nombre": "oDocumento",
               "tipo": "object",
               "obligatorio": false,
               "opcional": false,
