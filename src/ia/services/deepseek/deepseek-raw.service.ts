@@ -110,37 +110,6 @@ ${contextoEndpoints}
 2. **TÚ debes EXTRAER los valores del mensaje**
 3. **TÚ debes CONSTRUIR el payload con la estructura exacta**
 
-📌 EJEMPLO DE RESPUESTA CORRECTA:
-
-Usuario: "listame pacientes"
-{
-  "tipo": "ACCION",
-  "mensaje": "Voy a listar los pacientes para ti",
-  "modulo": "Clinico",
-  "accion": "leer",
-  "endpoint": "/Servicios/Clinico/WCF_Tsm_Pacientes.svc/F_Listar_Autocomplete",
-  "method": "POST",
-  "payload": {
-    "oEntity": {
-      "T_Descripcion": ""  // Vacío = listar todos
-    }
-  }
-}
-
-Usuario: "buscar paciente Juan Pérez"
-{
-  "tipo": "ACCION",
-  "mensaje": "Buscaré al paciente Juan Pérez",
-  "modulo": "Clinico",
-  "accion": "leer",
-  "endpoint": "/Servicios/Clinico/WCF_Tsm_Pacientes.svc/F_Listar_Autocomplete",
-  "method": "POST",
-  "payload": {
-    "oEntity": {
-      "T_Descripcion": "JUAN PÉREZ"  // Valor extraído del mensaje
-    }
-  }
-}
 
 ============================================================
 RESPUESTA ESPERADA:
@@ -160,9 +129,9 @@ RESPUESTA ESPERADA:
   "endpoint": "Ruta COMPLETA del endpoint seleccionado",
   "method": "POST|GET|PUT|DELETE",
   "payload": {
-    // ✅ TÚ debes construir la estructura EXACTA según la configuración
-    // ✅ TÚ debes extraer los valores del mensaje del usuario
-    // ✅ Si no hay valor para un campo, usa valor por defecto ("" para string, 0 para int, false para boolean)
+    //  TÚ debes construir la estructura EXACTA según la configuración
+    //  TÚ debes extraer los valores del mensaje del usuario
+    //  Si no hay valor para un campo, usa valor por defecto ("" para string, 0 para int, false para boolean)
   }
 }
 
@@ -177,6 +146,10 @@ REGLAS OBLIGATORIAS:
 `;
     }
 
+    /**
+     * Genera un string con TODOS los endpoints y su ESTRUCTURA EXACTA de payload
+     * SIN hardcodeo - SOLO muestra la configuración real
+     */
     /**
      * Genera un string con TODOS los endpoints y su ESTRUCTURA EXACTA de payload
      * SIN hardcodeo - SOLO muestra la configuración real
@@ -199,22 +172,44 @@ REGLAS OBLIGATORIAS:
                         contexto += `   Método: ${ep.metodo}\n`;
                         contexto += `\n   📦 ESTRUCTURA EXACTA DEL PAYLOAD:\n`;
 
-                        // Mostrar la estructura EXACTA que DEBE construir la IA
+                        // ✅ CORREGIDO: Mostrar la estructura completa con propiedades internas
                         ep.parametros.forEach((param: any) => {
                             if (param.estructura?.esObjeto) {
+                                // ✅ AHORA SÍ MUESTRA LAS PROPIEDADES DEL OBJETO
                                 contexto += `   {\n`;
                                 contexto += `     "${param.nombre}": {\n`;
-                                param.estructura.propiedades?.forEach((prop: any) => {
-                                    const valorPorDefecto = this.obtenerValorPorDefecto(prop.tipo);
-                                    contexto += `       "${prop.nombre}": ${valorPorDefecto}  // ${prop.tipo}${prop.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
-                                });
+                                
+                                // 🔥 IMPORTANTE: Iterar sobre TODAS las propiedades
+                                if (param.estructura.propiedades && param.estructura.propiedades.length > 0) {
+                                    param.estructura.propiedades.forEach((prop: any, index: number) => {
+                                        const valorPorDefecto = this.obtenerValorPorDefecto(prop.tipo);
+                                        const coma = index < param.estructura.propiedades.length - 1 ? ',' : '';
+                                        contexto += `       "${prop.nombre}": ${valorPorDefecto}${coma}  // ${prop.tipo}${prop.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
+                                    });
+                                } else {
+                                    // Si no hay propiedades definidas, mostrar objeto vacío
+                                    contexto += `       // ⚠️ Sin propiedades definidas en la configuración\n`;
+                                }
+                                
                                 contexto += `     }\n`;
                                 contexto += `   }\n`;
+                            } else if (param.estructura?.esArray) {
+                                // 🔥 Manejo para arrays
+                                contexto += `   { "${param.nombre}": [] }  // Array\n`;
+                                if (param.estructura.propiedades && param.estructura.propiedades.length > 0) {
+                                    contexto += `     // Estructura de cada elemento:\n`;
+                                    param.estructura.propiedades.forEach((prop: any) => {
+                                        const valorPorDefecto = this.obtenerValorPorDefecto(prop.tipo);
+                                        contexto += `     //   { "${prop.nombre}": ${valorPorDefecto} }  // ${prop.tipo}\n`;
+                                    });
+                                }
                             } else {
+                                // Parámetro simple
                                 const valorPorDefecto = this.obtenerValorPorDefecto(param.tipo);
-                                contexto += `   { "${param.nombre}": ${valorPorDefecto} }  // ${param.tipo}\n`;
+                                contexto += `   { "${param.nombre}": ${valorPorDefecto} }  // ${param.tipo}${param.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
                             }
                         });
+                        
                         contexto += `\n${'─'.repeat(80)}\n`;
                     });
                 }
