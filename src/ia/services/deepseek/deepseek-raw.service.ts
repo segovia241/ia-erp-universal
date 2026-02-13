@@ -46,13 +46,14 @@ export class DeepSeekRawService {
 
     /**
      * Genera el system prompt dinámico con la ESTRUCTURA EXACTA de cada endpoint
+     * LA IA es la única responsable de entender y extraer valores
      */
     private generarSystemPrompt(): string {
         const listaModulos = this.modulosDisponibles
             .map(mod => `   - ${mod}`)
             .join('\n');
 
-        const contextoEndpoints = this.generarContextoEndpointsConEstructuraExacta();
+        const contextoEndpoints = this.generarContextoEndpoints();
 
         return `
 Eres un asistente inteligente dentro de un ERP.
@@ -77,7 +78,7 @@ CLASIFICACIÓN DE MENSAJES:
 
 2. ACCION - Cuando el usuario:
    - Quiere listar, buscar, crear, actualizar o eliminar datos de negocio
-   - Menciona pacientes, médicos, clientes, usuarios, documentos, monedas, formas de pago
+   - Menciona entidades de negocio (pacientes, médicos, clientes, usuarios, documentos, monedas, formas de pago, etc.)
    - Especifica un módulo Y una operación CRUD
    - EJEMPLOS: "listar pacientes", "crear usuario", "buscar cliente", "obtener monedas"
 
@@ -87,17 +88,56 @@ REGLAS CRÍTICAS DE CLASIFICACIÓN:
 ❌ SI el usuario pregunta por los MÓDULOS DISPONIBLES:
    - Es CONVERSACION, NUNCA ACCION
    - NO selecciones un endpoint
-   - NO generes payload
    - SOLO responde con la lista de módulos
 
 ✅ SOLO clasifica como ACCION si el usuario pide una operación de negocio específica
 
 ============================================================
 ENDPOINTS DISPONIBLES (SOLO PARA ACCIONES DE NEGOCIO):
+
 ${contextoEndpoints}
 ============================================================
 
-Tu respuesta DEBE ser JSON con UNA de estas dos estructuras:
+⚠️ INSTRUCCIONES CRÍTICAS PARA ACCIONES:
+
+1. **TÚ eres responsable de ENTENDER el mensaje del usuario**
+2. **TÚ debes EXTRAER los valores del mensaje**
+3. **TÚ debes CONSTRUIR el payload con la estructura exacta**
+
+📌 EJEMPLO DE RESPUESTA CORRECTA:
+
+Usuario: "listame pacientes"
+{
+  "tipo": "ACCION",
+  "mensaje": "Voy a listar los pacientes para ti",
+  "modulo": "Clinico",
+  "accion": "leer",
+  "endpoint": "/Servicios/Clinico/WCF_Tsm_Pacientes.svc/F_Listar_Autocomplete",
+  "method": "POST",
+  "payload": {
+    "oEntity": {
+      "T_Descripcion": ""  // Vacío = listar todos
+    }
+  }
+}
+
+Usuario: "buscar paciente Juan Pérez"
+{
+  "tipo": "ACCION",
+  "mensaje": "Buscaré al paciente Juan Pérez",
+  "modulo": "Clinico",
+  "accion": "leer",
+  "endpoint": "/Servicios/Clinico/WCF_Tsm_Pacientes.svc/F_Listar_Autocomplete",
+  "method": "POST",
+  "payload": {
+    "oEntity": {
+      "T_Descripcion": "JUAN PÉREZ"  // Valor extraído del mensaje
+    }
+  }
+}
+
+============================================================
+RESPUESTA ESPERADA:
 
 --- PARA CONVERSACION ---
 {
@@ -105,33 +145,37 @@ Tu respuesta DEBE ser JSON con UNA de estas dos estructuras:
   "mensaje": "Tu respuesta amigable al usuario"
 }
 
---- PARA ACCION (SOLO operaciones de negocio) ---
+--- PARA ACCION ---
 {
   "tipo": "ACCION",
   "mensaje": "Respuesta natural al usuario indicando qué vas a hacer",
   "modulo": "Nombre EXACTO del módulo",
   "accion": "leer|crear|actualizar|eliminar",
-  "endpoint": "Ruta completa del endpoint seleccionado",
+  "endpoint": "Ruta COMPLETA del endpoint seleccionado",
   "method": "POST|GET|PUT|DELETE",
   "payload": {
-    // Estructura exacta del endpoint, según lo definido en la configuración, con valores extraídos del mensaje o vacíos
+    // ✅ TÚ debes construir la estructura EXACTA según la configuración
+    // ✅ TÚ debes extraer los valores del mensaje del usuario
+    // ✅ Si no hay valor para un campo, usa valor por defecto ("" para string, 0 para int, false para boolean)
   }
 }
 
-REGLAS CRÍTICAS - OBLIGATORIAS:
-1. SI pregunta por MÓDULOS DISPONIBLES → CONVERSACION
-2. SIEMPRE debes seleccionar UN endpoint específico para ACCIONES, NUNCA preguntar
-3. NUNCA devuelvas una lista de endpoints - SIEMPRE uno específico para ACCIONES
-4. NO agregues texto fuera del JSON
-5. Siempre debes devolver un JSON válido, NUNCA texto sin formato
+============================================================
+REGLAS OBLIGATORIAS:
+1. SIEMPRE debes incluir payload en las ACCIONES
+2. El payload debe tener la ESTRUCTURA EXACTA definida en la configuración
+3. Debes EXTRAER los valores del mensaje del usuario
+4. Si no hay valor para un campo, usa valor por defecto
+5. NUNCA agregues texto fuera del JSON
 6. SI no entiendes el mensaje, responde CONVERSACION pidiendo aclaración
-7. Siempre infiere si es una CONVERSACION o una ACCION basándote en las palabras clave y el contexto del mensaje, NO preguntes al usuario qué es
 `;
     }
+
     /**
      * Genera un string con TODOS los endpoints y su ESTRUCTURA EXACTA de payload
+     * SIN hardcodeo - SOLO muestra la configuración real
      */
-    private generarContextoEndpointsConEstructuraExacta(): string {
+    private generarContextoEndpoints(): string {
         let contexto = '';
 
         for (const modulo of this.config.modulos) {
@@ -143,43 +187,26 @@ REGLAS CRÍTICAS - OBLIGATORIAS:
                 if (endpoints && endpoints.length > 0) {
                     contexto += `\n--- ACCIÓN: ${accion.toUpperCase()} ---\n`;
                     endpoints.forEach((ep: Endpoint) => {
-                        contexto += `\n📌 ENDPOINT: ${ep.endpoint}\n`;
+                        contexto += `\n📍 ENDPOINT: ${ep.endpoint}\n`;
                         contexto += `   Nombre: ${ep.nombreReferencia}\n`;
                         contexto += `   Descripción: ${ep.descripcion}\n`;
                         contexto += `   Método: ${ep.metodo}\n`;
                         contexto += `\n   📦 ESTRUCTURA EXACTA DEL PAYLOAD:\n`;
 
-                        // Mostrar la estructura EXACTA que debe enviarse
+                        // Mostrar la estructura EXACTA que DEBE construir la IA
                         ep.parametros.forEach((param: any) => {
                             if (param.estructura?.esObjeto) {
                                 contexto += `   {\n`;
                                 contexto += `     "${param.nombre}": {\n`;
                                 param.estructura.propiedades?.forEach((prop: any) => {
-                                    contexto += `       "${prop.nombre}": "${prop.tipo}"${prop.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
+                                    const valorPorDefecto = this.obtenerValorPorDefecto(prop.tipo);
+                                    contexto += `       "${prop.nombre}": ${valorPorDefecto}  // ${prop.tipo}${prop.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
                                 });
                                 contexto += `     }\n`;
                                 contexto += `   }\n`;
-
-                                // EJEMPLO CONCRETO con valores de ejemplo
-                                contexto += `\n   ✅ EJEMPLO DE PAYLOAD CORRECTO:\n`;
-                                contexto += `   {\n`;
-                                contexto += `     "${param.nombre}": {\n`;
-                                param.estructura.propiedades?.forEach((prop: any, index: number) => {
-                                    let valorEjemplo = '';
-                                    if (prop.tipo === 'string') valorEjemplo = '"texto de búsqueda"';
-                                    if (prop.tipo === 'int') valorEjemplo = '123';
-                                    if (prop.tipo === 'boolean') valorEjemplo = 'false';
-                                    contexto += `       "${prop.nombre}": ${valorEjemplo}`;
-                                    if (index < param.estructura!.propiedades!.length - 1) contexto += `,`;
-                                    contexto += `\n`;
-                                });
-                                contexto += `     }\n`;
-                                contexto += `   }\n`;
-
                             } else {
-                                contexto += `   {\n`;
-                                contexto += `     "${param.nombre}": "${param.tipo}"\n`;
-                                contexto += `   }\n`;
+                                const valorPorDefecto = this.obtenerValorPorDefecto(param.tipo);
+                                contexto += `   { "${param.nombre}": ${valorPorDefecto} }  // ${param.tipo}\n`;
                             }
                         });
                         contexto += `\n${'─'.repeat(80)}\n`;
@@ -189,6 +216,27 @@ REGLAS CRÍTICAS - OBLIGATORIAS:
         }
 
         return contexto;
+    }
+
+    /**
+     * Obtiene el valor por defecto según el tipo de dato
+     */
+    private obtenerValorPorDefecto(tipo: string): string {
+        switch (tipo?.toLowerCase()) {
+            case 'string':
+                return '""';
+            case 'int':
+            case 'number':
+                return '0';
+            case 'boolean':
+                return 'false';
+            case 'object':
+                return '{}';
+            case 'array':
+                return '[]';
+            default:
+                return 'null';
+        }
     }
 
     async sendRawMessage(message: string): Promise<any> {
@@ -279,7 +327,7 @@ REGLAS CRÍTICAS - OBLIGATORIAS:
     }
 
     /**
-     * Procesa una acción: valida módulo y endpoint seleccionado por la IA
+     * Procesa una acción - AHORA LA IA ES RESPONSABLE DEL PAYLOAD COMPLETO
      */
     private async procesarAccion(
         mensajeUsuario: string,
@@ -348,17 +396,35 @@ REGLAS CRÍTICAS - OBLIGATORIAS:
             endpoint = endpoints[0];
         }
 
-        // 5. Construir payload con la estructura correcta
-        let payload = respuestaIA.payload;
-
-        if (!payload || Object.keys(payload).length === 0) {
-            payload = this.construirPayloadDesdeMensaje(endpoint, mensajeUsuario);
-        } else {
-            // Asegurar que el payload tenga la estructura correcta
-            payload = this.normalizarPayload(endpoint, payload, mensajeUsuario);
+        // 5. ✅ VALIDAR que la IA haya enviado payload
+        if (!respuestaIA.payload || Object.keys(respuestaIA.payload).length === 0) {
+            return {
+                tipo: 'ACCION',
+                mensaje: `No pude determinar los filtros de búsqueda. ¿Qué específicamente quieres buscar en ${respuestaIA.modulo}?`,
+                requiereFiltros: true,
+                modulo: respuestaIA.modulo,
+                accion: respuestaIA.accion,
+                endpoint: endpoint.endpoint,
+                method: endpoint.metodo
+            };
         }
 
-        // 6. Construir respuesta
+        // 6. ✅ VALIDAR que el payload tenga la estructura correcta
+        const validacionPayload = this.validarEstructuraPayload(endpoint, respuestaIA.payload);
+        if (!validacionPayload.valido) {
+            return {
+                tipo: 'ACCION',
+                mensaje: validacionPayload.mensaje,
+                requiereFiltros: true,
+                modulo: respuestaIA.modulo,
+                accion: respuestaIA.accion,
+                endpoint: endpoint.endpoint,
+                method: endpoint.metodo,
+                payload: respuestaIA.payload
+            };
+        }
+
+        // 7. Construir respuesta
         const urlCompleta = `${this.config.empresa.baseUrl}${endpoint.endpoint}`;
 
         return {
@@ -368,7 +434,7 @@ REGLAS CRÍTICAS - OBLIGATORIAS:
             accion: respuestaIA.accion,
             endpoint: endpoint.endpoint,
             urlCompleta: urlCompleta,
-            payload: payload,
+            payload: respuestaIA.payload,  // ✅ USAMOS EL PAYLOAD DE LA IA
             method: endpoint.metodo,
             requiereFiltros: false,
             endpointId: endpoint.id
@@ -376,52 +442,47 @@ REGLAS CRÍTICAS - OBLIGATORIAS:
     }
 
     /**
-     * Normaliza el payload para que tenga la estructura correcta según el endpoint
+     * Valida que el payload tenga la estructura correcta según el endpoint
      */
-    private normalizarPayload(endpoint: Endpoint, payloadRecibido: any, mensajeUsuario: string): any {
-        const payloadNormalizado: any = {};
+    private validarEstructuraPayload(endpoint: Endpoint, payload: any): { valido: boolean; mensaje: string } {
+        if (!payload) {
+            return {
+                valido: false,
+                mensaje: "El payload no puede estar vacío"
+            };
+        }
 
-        endpoint.parametros.forEach((param: any) => {
+        for (const param of endpoint.parametros) {
             if (param.estructura?.esObjeto) {
-                // Si el payload ya tiene el objeto, usarlo, si no crearlo
-                payloadNormalizado[param.nombre] = payloadRecibido[param.nombre] || {};
+                // Validar que exista el objeto contenedor
+                if (!payload[param.nombre]) {
+                    return {
+                        valido: false,
+                        mensaje: `El payload debe incluir '${param.nombre}' como objeto contenedor`
+                    };
+                }
 
-                param.estructura.propiedades?.forEach((prop: any) => {
-                    // Si la propiedad ya existe en el payload recibido, mantenerla
-                    if (payloadRecibido[param.nombre]?.[prop.nombre]) {
-                        payloadNormalizado[param.nombre][prop.nombre] = payloadRecibido[param.nombre][prop.nombre];
-                    } else {
-                        // Si no, intentar extraerla del mensaje
-                        const valorExtraido = this.extraerValorDeMensaje(mensajeUsuario, prop.nombre);
-                        if (prop.tipo === 'string') {
-                            payloadNormalizado[param.nombre][prop.nombre] = valorExtraido !== null ? valorExtraido.toUpperCase() : '';
-                        } else if (prop.tipo === 'int') {
-                            const valorNumerico = valorExtraido ? parseInt(valorExtraido, 10) : 0;
-                            payloadNormalizado[param.nombre][prop.nombre] = isNaN(valorNumerico) ? 0 : valorNumerico;
-                        } else if (prop.tipo === 'boolean') {
-                            payloadNormalizado[param.nombre][prop.nombre] = false;
-                        }
-                    }
-                });
-            } else {
-                // Parámetro simple
-                if (payloadRecibido[param.nombre]) {
-                    payloadNormalizado[param.nombre] = payloadRecibido[param.nombre];
-                } else {
-                    const valorExtraido = this.extraerValorDeMensaje(mensajeUsuario, param.nombre);
-                    if (param.tipo === 'string') {
-                        payloadNormalizado[param.nombre] = valorExtraido !== null ? valorExtraido : '';
-                    } else if (param.tipo === 'int') {
-                        const valorNumerico = valorExtraido ? parseInt(valorExtraido, 10) : 0;
-                        payloadNormalizado[param.nombre] = isNaN(valorNumerico) ? 0 : valorNumerico;
-                    } else if (param.tipo === 'boolean') {
-                        payloadNormalizado[param.nombre] = false;
+                // Validar propiedades obligatorias
+                for (const prop of param.estructura.propiedades || []) {
+                    if (!prop.opcional && payload[param.nombre][prop.nombre] === undefined) {
+                        return {
+                            valido: false,
+                            mensaje: `El campo '${prop.nombre}' es obligatorio en ${param.nombre}`
+                        };
                     }
                 }
+            } else {
+                // Parámetro simple
+                if (!param.opcional && payload[param.nombre] === undefined) {
+                    return {
+                        valido: false,
+                        mensaje: `El campo '${param.nombre}' es obligatorio`
+                    };
+                }
             }
-        });
+        }
 
-        return payloadNormalizado;
+        return { valido: true, mensaje: "Estructura válida" };
     }
 
     /**
@@ -435,78 +496,6 @@ REGLAS CRÍTICAS - OBLIGATORIAS:
             'eliminar': 'eliminar'
         };
         return verbos[accion] || accion;
-    }
-
-    /**
-     * Construye un payload basado en el mensaje del usuario - CON ESTRUCTURA CORRECTA
-     */
-    private construirPayloadDesdeMensaje(endpoint: Endpoint, mensaje: string): any {
-        const payload: any = {};
-
-        endpoint.parametros.forEach((param: any) => {
-            if (param.estructura?.esObjeto) {
-                // Crear el objeto contenedor
-                payload[param.nombre] = {};
-
-                // Llenar las propiedades del objeto
-                param.estructura.propiedades?.forEach((prop: any) => {
-                    const valorExtraido = this.extraerValorDeMensaje(mensaje, prop.nombre);
-
-                    if (prop.tipo === 'string') {
-                        payload[param.nombre][prop.nombre] = valorExtraido !== null
-                            ? valorExtraido.toUpperCase()
-                            : '';
-                    } else if (prop.tipo === 'int') {
-                        const valorNumerico = valorExtraido ? parseInt(valorExtraido, 10) : 0;
-                        payload[param.nombre][prop.nombre] = isNaN(valorNumerico) ? 0 : valorNumerico;
-                    } else if (prop.tipo === 'boolean') {
-                        payload[param.nombre][prop.nombre] = false;
-                    }
-                });
-            } else {
-                // Parámetro simple
-                if (param.tipo === 'string') {
-                    const valorExtraido = this.extraerValorDeMensaje(mensaje, param.nombre);
-                    payload[param.nombre] = valorExtraido !== null ? valorExtraido : '';
-                } else if (param.tipo === 'int') {
-                    const valorExtraido = this.extraerValorDeMensaje(mensaje, param.nombre);
-                    const valorNumerico = valorExtraido ? parseInt(valorExtraido, 10) : 0;
-                    payload[param.nombre] = isNaN(valorNumerico) ? 0 : valorNumerico;
-                } else if (param.tipo === 'boolean') {
-                    payload[param.nombre] = false;
-                }
-            }
-        });
-
-        return payload;
-    }
-
-    /**
-     * Extrae un valor del mensaje del usuario - MEJORADO
-     */
-    private extraerValorDeMensaje(mensaje: string, nombreCampo: string): string | null {
-        const campoLower = nombreCampo.toLowerCase()
-            .replace('t_', '')
-            .replace('str_', '')
-            .replace('_', '');
-
-        // Patrones generales de extracción
-        const patrones = [
-            new RegExp(`${campoLower}\\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\\s]+)`, 'i'),
-            new RegExp(`([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\\s]+)\\s+${campoLower}`, 'i'),
-            new RegExp(`con\\s+${campoLower}\\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\\s]+)`, 'i'),
-            new RegExp(`de\\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\\s]+)`, 'i'),
-            new RegExp(`:?\\s*([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\\s]+)$`, 'i')
-        ];
-
-        for (const patron of patrones) {
-            const match = mensaje.match(patron);
-            if (match && match[1]) {
-                return match[1].trim();
-            }
-        }
-
-        return null;
     }
 
     async sendAndMapToSchema(message: string): Promise<IAResponseSchema> {
