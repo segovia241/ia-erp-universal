@@ -54,6 +54,12 @@ export class DeepSeekRawService {
             .join('\n');
 
         const contextoEndpoints = this.generarContextoEndpoints();
+        
+        // 📋 CONSOLE LOG: Estructura JSON que se envía a la IA
+        console.log("📋 [DEEPSEEK] SYSTEM PROMPT GENERADO - ESTRUCTURA JSON QUE SE ENVÍA A LA IA:");
+        console.log("═══════════════════════════════════════════════════════════════════════════");
+        console.log(contextoEndpoints);
+        console.log("═══════════════════════════════════════════════════════════════════════════\n");
 
         return `
 Eres un asistente inteligente dentro de un ERP.
@@ -240,22 +246,32 @@ REGLAS OBLIGATORIAS:
     }
 
     async sendRawMessage(message: string): Promise<any> {
+        const systemPrompt = this.generarSystemPrompt();
+        
+        const requestBody = {
+            model: "deepseek-chat",
+            messages: [
+                {
+                    role: "system",
+                    content: systemPrompt
+                },
+                {
+                    role: "user",
+                    content: message
+                }
+            ],
+            temperature: 0
+        };
+
+        // 📋 CONSOLE LOG: JSON completo que se envía a DeepSeek
+        console.log("📤 [DEEPSEEK] REQUEST BODY COMPLETO ENVIADO A LA API:");
+        console.log("═══════════════════════════════════════════════════════════════════════════");
+        console.log(JSON.stringify(requestBody, null, 2));
+        console.log("═══════════════════════════════════════════════════════════════════════════\n");
+
         const response = await axios.post(
             this.baseUrl,
-            {
-                model: "deepseek-chat",
-                messages: [
-                    {
-                        role: "system",
-                        content: this.generarSystemPrompt()
-                    },
-                    {
-                        role: "user",
-                        content: message
-                    }
-                ],
-                temperature: 0
-            },
+            requestBody,
             {
                 headers: {
                     "Content-Type": "application/json",
@@ -333,6 +349,16 @@ REGLAS OBLIGATORIAS:
         mensajeUsuario: string,
         respuestaIA: IAResponseSchema
     ): Promise<IAResponseSchema> {
+
+        // 📋 CONSOLE LOG: Payload que decidió colocar la IA
+        console.log("🎯 [DEEPSEEK] PAYLOAD DECIDIDO POR LA IA:");
+        console.log("═══════════════════════════════════════════════════════════════════════════");
+        console.log("📝 Mensaje usuario:", mensajeUsuario);
+        console.log("📦 Payload IA:", JSON.stringify(respuestaIA.payload, null, 2));
+        console.log("📌 Módulo:", respuestaIA.modulo);
+        console.log("⚙️ Acción:", respuestaIA.accion);
+        console.log("🔗 Endpoint:", respuestaIA.endpoint);
+        console.log("═══════════════════════════════════════════════════════════════════════════\n");
 
         // 1. Validar módulo
         if (!respuestaIA.modulo) {
@@ -427,7 +453,7 @@ REGLAS OBLIGATORIAS:
         // 7. Construir respuesta
         const urlCompleta = `${this.config.empresa.baseUrl}${endpoint.endpoint}`;
 
-        return {
+        const respuestaFinal = {
             tipo: 'ACCION',
             mensaje: `✅ ${respuestaIA.mensaje || `Voy a ${this.obtenerVerboAccion(respuestaIA.accion)} en ${respuestaIA.modulo}`}`,
             modulo: respuestaIA.modulo,
@@ -439,6 +465,14 @@ REGLAS OBLIGATORIAS:
             requiereFiltros: false,
             endpointId: endpoint.id
         };
+
+        // 📋 CONSOLE LOG: JSON final que se va a usar
+        console.log("🚀 [DEEPSEEK] JSON FINAL QUE SE VA A USAR PARA LA PETICIÓN:");
+        console.log("═══════════════════════════════════════════════════════════════════════════");
+        console.log(JSON.stringify(respuestaFinal, null, 2));
+        console.log("═══════════════════════════════════════════════════════════════════════════\n");
+
+        return respuestaFinal;
     }
 
     /**
@@ -511,6 +545,13 @@ REGLAS OBLIGATORIAS:
 
         try {
             respuestaInicial = JSON.parse(content);
+            
+            // 📋 CONSOLE LOG: Respuesta parseada de la IA
+            console.log("🤖 [DEEPSEEK] RESPUESTA PARSEADA DE LA IA:");
+            console.log("═══════════════════════════════════════════════════════════════════════════");
+            console.log(JSON.stringify(respuestaInicial, null, 2));
+            console.log("═══════════════════════════════════════════════════════════════════════════\n");
+            
         } catch {
             throw new Error("DeepSeek no devolvió un JSON válido");
         }
