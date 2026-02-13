@@ -158,71 +158,66 @@ REGLAS OBLIGATORIAS:
      * Genera un string con TODOS los endpoints y su ESTRUCTURA EXACTA de payload
      * SIN hardcodeo - SOLO muestra la configuración real
      */
-    private generarContextoEndpoints(): string {
-        let contexto = '';
+    /**
+ * Genera un string con TODOS los endpoints y su ESTRUCTURA EXACTA de payload
+ */
+private generarContextoEndpoints(): string {
+    let contexto = '';
 
-        for (const modulo of this.config.modulos) {
-            const moduloConAcciones = modulo as ModuloConAcciones;
-            contexto += `\n========== MÓDULO: ${modulo.nombre} ==========\n`;
+    for (const modulo of this.config.modulos) {
+        const moduloConAcciones = modulo as ModuloConAcciones;
+        contexto += `\n========== MÓDULO: ${modulo.nombre} ==========\n`;
 
-            for (const accion of this.accionesDisponibles) {
-                const endpoints = moduloConAcciones[accion];
-                if (endpoints && endpoints.length > 0) {
-                    contexto += `\n--- ACCIÓN: ${accion.toUpperCase()} ---\n`;
-                    endpoints.forEach((ep: Endpoint) => {
-                        contexto += `\n📍 ENDPOINT: ${ep.endpoint}\n`;
-                        contexto += `   Nombre: ${ep.nombreReferencia}\n`;
-                        contexto += `   Descripción: ${ep.descripcion}\n`;
-                        contexto += `   Método: ${ep.metodo}\n`;
-                        contexto += `\n   📦 ESTRUCTURA EXACTA DEL PAYLOAD:\n`;
+        for (const accion of this.accionesDisponibles) {
+            const endpoints = moduloConAcciones[accion];
+            if (endpoints && endpoints.length > 0) {
+                contexto += `\n--- ACCIÓN: ${accion.toUpperCase()} ---\n`;
+                endpoints.forEach((ep: Endpoint) => {
+                    contexto += `\n📍 ENDPOINT: ${ep.endpoint}\n`;
+                    contexto += `   Nombre: ${ep.nombreReferencia}\n`;
+                    contexto += `   Descripción: ${ep.descripcion}\n`;
+                    contexto += `   Método: ${ep.metodo}\n`;
+                    contexto += `\n   📦 ESTRUCTURA EXACTA DEL PAYLOAD:\n`;
 
-                        // ✅ CORREGIDO: Manejo correcto de objetos con propiedades
-                        ep.parametros.forEach((param: any) => {
-                            if (param.estructura) {
-                                // 🔥 CASO 1: Es un objeto con propiedades
-                                if (param.estructura.esObjeto && param.estructura.propiedades && param.estructura.propiedades.length > 0) {
-                                    contexto += `   {\n`;
-                                    contexto += `     "${param.nombre}": {\n`;
-                                    
-                                    param.estructura.propiedades.forEach((prop: any, index: number) => {
-                                        const valorPorDefecto = this.obtenerValorPorDefecto(prop.tipo);
-                                        const coma = index < param.estructura.propiedades.length - 1 ? ',' : '';
-                                        contexto += `       "${prop.nombre}": ${valorPorDefecto}${coma}  // ${prop.tipo}${prop.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
-                                    });
-                                    
-                                    contexto += `     }\n`;
-                                    contexto += `   }\n`;
-                                } 
-                                // 🔥 CASO 2: Es un array con estructura
-                                else if (param.estructura.esArray && param.estructura.propiedades) {
-                                    contexto += `   { "${param.nombre}": [\n`;
-                                    contexto += `     // Array de objetos con esta estructura:\n`;
-                                    param.estructura.propiedades.forEach((prop: any) => {
-                                        const valorPorDefecto = this.obtenerValorPorDefecto(prop.tipo);
-                                        contexto += `     //   { "${prop.nombre}": ${valorPorDefecto} }\n`;
-                                    });
-                                    contexto += `   ] }\n`;
-                                }
-                                // 🔥 CASO 3: Objeto vacío (sin propiedades definidas)
-                                else {
-                                    contexto += `   { "${param.nombre}": {} }  // ${param.tipo}${param.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
-                                    contexto += `     // ⚠️ ATENCIÓN: Este objeto no tiene propiedades definidas en la configuración\n`;
-                                }
-                            } else {
-                                // 🔥 CASO 4: Parámetro simple
-                                const valorPorDefecto = this.obtenerValorPorDefecto(param.tipo);
-                                contexto += `   { "${param.nombre}": ${valorPorDefecto} }  // ${param.tipo}${param.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
-                            }
-                        });
-                        
-                        contexto += `\n${'─'.repeat(80)}\n`;
+                    ep.parametros.forEach((param: any) => {
+                        // 🔥 CASO 1: TIENE PROPIEDADES - Mostrar estructura completa
+                        if (param.estructura?.propiedades?.length > 0) {
+                            contexto += `   {\n`;
+                            contexto += `     "${param.nombre}": {\n`;
+                            
+                            param.estructura.propiedades.forEach((prop: any, index: number) => {
+                                const valorPorDefecto = this.obtenerValorPorDefecto(prop.tipo);
+                                const coma = index < param.estructura.propiedades.length - 1 ? ',' : '';
+                                contexto += `       "${prop.nombre}": ${valorPorDefecto}${coma}  // ${prop.tipo}${prop.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
+                            });
+                            
+                            contexto += `     }\n`;
+                            contexto += `   }\n`;
+                        } 
+                        // 🔥 CASO 2: ES OBJETO PERO SIN PROPIEDADES
+                        else if (param.estructura?.esObjeto) {
+                            contexto += `   { "${param.nombre}": {} }  // object (obligatorio)\n`;
+                            contexto += `     // ⚠️ CONFIGURACIÓN INCOMPLETA: Este objeto no tiene propiedades definidas\n`;
+                        }
+                        // 🔥 CASO 3: ES ARRAY
+                        else if (param.estructura?.esArray) {
+                            contexto += `   { "${param.nombre}": [] }  // array\n`;
+                        }
+                        // 🔥 CASO 4: PARÁMETRO SIMPLE
+                        else {
+                            const valorPorDefecto = this.obtenerValorPorDefecto(param.tipo);
+                            contexto += `   { "${param.nombre}": ${valorPorDefecto} }  // ${param.tipo}${param.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
+                        }
                     });
-                }
+                    
+                    contexto += `\n${'─'.repeat(80)}\n`;
+                });
             }
         }
-
-        return contexto;
     }
+
+    return contexto;
+}
 
     /**
      * Obtiene el valor por defecto según el tipo de dato
