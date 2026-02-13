@@ -453,7 +453,7 @@ REGLAS OBLIGATORIAS:
         // 7. Construir respuesta
         const urlCompleta = `${this.config.empresa.baseUrl}${endpoint.endpoint}`;
 
-        const respuestaFinal = {
+        const respuestaFinal: IAResponseSchema = {
             tipo: 'ACCION',
             mensaje: `✅ ${respuestaIA.mensaje || `Voy a ${this.obtenerVerboAccion(respuestaIA.accion)} en ${respuestaIA.modulo}`}`,
             modulo: respuestaIA.modulo,
