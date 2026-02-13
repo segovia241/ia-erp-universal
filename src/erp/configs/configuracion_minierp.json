@@ -276,6 +276,38 @@
               }
             }
           ]
+        },
+        {
+          "id": 9,
+          "endpoint": "/Servicios/Clinico/WCF_VentaControlClinico.svc/F_ListarVentaControlClinico",
+          "nombreReferencia": "Obtener reporte de ventas",
+          "descripcion": "Trae los reporte de ventas, el formato de fecha debe ser siempre \"DD/MM/YYYY\"",
+          "metodo": "POST",
+          "parametros": [
+            {
+              "nombre": "Filtro",
+              "tipo": "object",
+              "opcional": false,
+              "fuente": {
+                "idReferencia": 0,
+                "nombreReferencia": "Directo"
+              },
+              "estructura": {
+                "propiedades": [
+                  {
+                    "nombre": "F_Fecha_Emision",
+                    "tipo": "string",
+                    "opcional": false
+                  },
+                  {
+                    "nombre": "F_Fecha_Vencimiento",
+                    "tipo": "string",
+                    "opcional": false
+                  }
+                ]
+              }
+            }
+          ]
         }
       ],
       "actualizar": [],
