@@ -154,6 +154,10 @@ REGLAS OBLIGATORIAS:
      * Genera un string con TODOS los endpoints y su ESTRUCTURA EXACTA de payload
      * SIN hardcodeo - SOLO muestra la configuración real
      */
+    /**
+     * Genera un string con TODOS los endpoints y su ESTRUCTURA EXACTA de payload
+     * SIN hardcodeo - SOLO muestra la configuración real
+     */
     private generarContextoEndpoints(): string {
         let contexto = '';
 
@@ -172,39 +176,40 @@ REGLAS OBLIGATORIAS:
                         contexto += `   Método: ${ep.metodo}\n`;
                         contexto += `\n   📦 ESTRUCTURA EXACTA DEL PAYLOAD:\n`;
 
-                        // ✅ CORREGIDO: Mostrar la estructura completa con propiedades internas
+                        // ✅ CORREGIDO: Manejo correcto de objetos con propiedades
                         ep.parametros.forEach((param: any) => {
-                            if (param.estructura?.esObjeto) {
-                                // ✅ AHORA SÍ MUESTRA LAS PROPIEDADES DEL OBJETO
-                                contexto += `   {\n`;
-                                contexto += `     "${param.nombre}": {\n`;
-                                
-                                // 🔥 IMPORTANTE: Iterar sobre TODAS las propiedades
-                                if (param.estructura.propiedades && param.estructura.propiedades.length > 0) {
+                            if (param.estructura) {
+                                // 🔥 CASO 1: Es un objeto con propiedades
+                                if (param.estructura.esObjeto && param.estructura.propiedades && param.estructura.propiedades.length > 0) {
+                                    contexto += `   {\n`;
+                                    contexto += `     "${param.nombre}": {\n`;
+                                    
                                     param.estructura.propiedades.forEach((prop: any, index: number) => {
                                         const valorPorDefecto = this.obtenerValorPorDefecto(prop.tipo);
                                         const coma = index < param.estructura.propiedades.length - 1 ? ',' : '';
                                         contexto += `       "${prop.nombre}": ${valorPorDefecto}${coma}  // ${prop.tipo}${prop.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
                                     });
-                                } else {
-                                    // Si no hay propiedades definidas, mostrar objeto vacío
-                                    contexto += `       // ⚠️ Sin propiedades definidas en la configuración\n`;
-                                }
-                                
-                                contexto += `     }\n`;
-                                contexto += `   }\n`;
-                            } else if (param.estructura?.esArray) {
-                                // 🔥 Manejo para arrays
-                                contexto += `   { "${param.nombre}": [] }  // Array\n`;
-                                if (param.estructura.propiedades && param.estructura.propiedades.length > 0) {
-                                    contexto += `     // Estructura de cada elemento:\n`;
+                                    
+                                    contexto += `     }\n`;
+                                    contexto += `   }\n`;
+                                } 
+                                // 🔥 CASO 2: Es un array con estructura
+                                else if (param.estructura.esArray && param.estructura.propiedades) {
+                                    contexto += `   { "${param.nombre}": [\n`;
+                                    contexto += `     // Array de objetos con esta estructura:\n`;
                                     param.estructura.propiedades.forEach((prop: any) => {
                                         const valorPorDefecto = this.obtenerValorPorDefecto(prop.tipo);
-                                        contexto += `     //   { "${prop.nombre}": ${valorPorDefecto} }  // ${prop.tipo}\n`;
+                                        contexto += `     //   { "${prop.nombre}": ${valorPorDefecto} }\n`;
                                     });
+                                    contexto += `   ] }\n`;
+                                }
+                                // 🔥 CASO 3: Objeto vacío (sin propiedades definidas)
+                                else {
+                                    contexto += `   { "${param.nombre}": {} }  // ${param.tipo}${param.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
+                                    contexto += `     // ⚠️ ATENCIÓN: Este objeto no tiene propiedades definidas en la configuración\n`;
                                 }
                             } else {
-                                // Parámetro simple
+                                // 🔥 CASO 4: Parámetro simple
                                 const valorPorDefecto = this.obtenerValorPorDefecto(param.tipo);
                                 contexto += `   { "${param.nombre}": ${valorPorDefecto} }  // ${param.tipo}${param.opcional ? ' (opcional)' : ' (obligatorio)'}\n`;
                             }
